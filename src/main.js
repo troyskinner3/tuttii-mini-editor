@@ -95,8 +95,6 @@
   const redoBtn = document.getElementById("redoBtn");
   const resetBtn = document.getElementById("resetBtn");
   const inspector = document.getElementById("inspector");
-  const inspName = document.getElementById("inspName");
-  const inspSub = document.getElementById("inspSub");
   const closeInsp = document.getElementById("closeInsp");
   const duplicateClipBtn = document.getElementById("duplicateClip");
   const deleteClipBtn = document.getElementById("deleteClip");
@@ -580,11 +578,18 @@
     selectClip(uid);
     const clip = findClip(uid);
     if (!clip) { inspector.classList.remove("show"); return; }
-    inspName.childNodes[0].textContent = clip.label + " ";
-    inspSub.textContent = "· " + clip.songName;
     volSlider.value = Math.round(clip.volume * 100);
     volVal.textContent = Math.round(clip.volume * 100) + "%";
+    updateVolSliderFill();
     inspector.classList.add("show");
+  }
+
+  // Paints the filled (played) portion of the volume track up to the thumb,
+  // matching the real app's solid-fill slider look instead of the browser's
+  // flat default track.
+  function updateVolSliderFill() {
+    const pct = Number(volSlider.value);
+    volSlider.style.background = `linear-gradient(to right, var(--pink) ${pct}%, var(--border) ${pct}%)`;
   }
 
   closeInsp.addEventListener("click", () => {
@@ -626,6 +631,7 @@
     if (!clip) return;
     clip.volume = Number(volSlider.value) / 100;
     volVal.textContent = volSlider.value + "%";
+    updateVolSliderFill();
   });
   volSlider.addEventListener("change", commitHistory);
 
@@ -1073,6 +1079,7 @@
   selectedUid = null;
   document.querySelectorAll(".clip").forEach(el => el.classList.remove("selected"));
   inspector.classList.remove("show");
+  updateVolSliderFill();
   updateHistoryButtons();
   updatePlayheadEl();
 
