@@ -12,9 +12,13 @@ design spec and decision log.
 ## Status
 
 - **Pass 1 (done):** scaffolded into Vite, restyled to match the production
-  app screenshots (visual only, structure unchanged), mobile layout fixed
-  (timeline pinned, library scrolls independently, compacted so ~2 songs
-  are visible on a phone screen).
+  app screenshots, mobile layout fixed (timeline pinned, library scrolls
+  independently, compacted so ~2 songs are visible on a phone screen).
+  Since revisited with a deeper fidelity pass: pill chevrons, custom
+  volume slider, redesigned inspector, and the library rebuilt as a real
+  Songs/Vocals/Inst/Silence tab structure (tap a song to expose its
+  sections in place, tab controls what previewing plays) — matching the
+  production app's actual structure, not just its colors.
 - **Pass 2 (in progress):** swap the placeholder oscillator audio for real
   stem playback. Data model decided: one vocal stem + one instrumental
   stem per song (WAV, not MP3 — avoids MP3 encoder lead-in silence, which
