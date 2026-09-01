@@ -19,11 +19,32 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
     overscroll-behavior: none;
   }
+  /* Fixed-height app shell: .app-top (header/toolbar/timeline) never
+     scrolls, so the Vocal/Beats drop targets stay reachable at any screen
+     size; .app-scroll (library/CTA) is the only part that scrolls, in its
+     own region below — never overlapped by anything above it. */
   .app {
     max-width: 720px;
     margin: 0 auto;
-    padding: 16px 14px 100px;
-    min-height: 100vh;
+    padding: 16px 14px 0;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .app-top {
+    flex-shrink: 0;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    position: relative;
+    z-index: 1;
+  }
+  .app-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 100px;
   }
 
   /* Header */
