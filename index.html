@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tuttii — Try the Editor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23E84BC6'/%3E%3Cstop offset='1' stop-color='%23A055D5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%230B0716'/%3E%3Ccircle cx='16' cy='16' r='10' fill='url(%23g)'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <div class="header">
+    <div class="title-row">
+      <span class="pencil">✎</span>
+      <input class="title-input" id="titleInput" value="My demo mashup" />
+    </div>
+    <div class="export-group">
+      <span class="export-caption">Export</span>
+      <div class="export-buttons">
+        <button class="export-btn small" id="exportWavBtn">WAV</button>
+        <button class="export-btn small" id="exportMp3Btn">MP3</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar-row">
+    <div class="toolbar-pill locked">BPM <b>100</b></div>
+    <div class="toolbar-pill locked">KEY <b>C maj</b></div>
+    <div class="icon-circle disabled" title="Tuttii auto-matches key & tempo — locked for this demo">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.8L19 9l-5.4 1.2L12 16l-1.6-5.8L5 9l5.4-1.2z"/></svg>
+    </div>
+    <div class="icon-circle" id="undoBtn" title="Undo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 016 6v1"/></svg>
+    </div>
+    <div class="icon-circle" id="redoBtn" title="Redo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 00-6 6v1"/></svg>
+    </div>
+    <div class="icon-circle" id="resetBtn" title="Reset arrangement">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 16v-4h4"/></svg>
+    </div>
+  </div>
+  <p class="lock-caption">Locked for demo — download Tuttii to edit key and BPM.</p>
+
+  <div class="timeline-wrap">
+    <div class="time-header">
+      <div class="time-readout"><span class="cur" id="timeCur">0:00</span> <span class="sep">/</span> <span id="timeTotal">0:00</span></div>
+      <div class="grabber"></div>
+      <div class="spacer"></div>
+    </div>
+
+    <div class="scroll-area" id="scrollArea">
+      <div class="scroll-inner" id="scrollInner">
+        <div class="row" id="vocalRow">
+          <div class="row-label vocal">
+            <span class="icon">🎤</span><span>Vocal</span>
+          </div>
+          <div class="row-lane" id="vocalLane" data-track="vocal">
+            <div class="empty-state" id="vocalEmpty">Drop a section here for its vocal stem</div>
+          </div>
+        </div>
+        <div class="row" id="beatsRow">
+          <div class="row-label beats">
+            <span class="icon">🥁</span><span>Beats</span>
+          </div>
+          <div class="row-lane beats" id="beatsLane" data-track="beats">
+            <div class="empty-state" id="beatsEmpty">Drop a section here for its instrumental stem</div>
+          </div>
+        </div>
+        <div class="scrub-row">
+          <div class="scrub-label">Scrub</div>
+          <div class="scrub-lane" id="scrubLane"></div>
+        </div>
+        <div class="playhead" id="playhead" style="left:0;"></div>
+      </div>
+    </div>
+
+    <div class="transport">
+      <button class="side-btn" id="skipStartBtn" title="Jump to start">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12l10 6V6z"/></svg>
+      </button>
+      <button class="play-btn" id="playBtn">
+        <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="side-btn locate-btn" id="locateBtn" title="Center on playhead">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="inspector" id="inspector">
+    <div class="inspector-head">
+      <div class="name" id="inspName">— <span id="inspSub"></span></div>
+      <div style="display:flex; gap:8px;">
+        <button class="close-inspector" id="duplicateClip" title="Duplicate">⧉</button>
+        <button class="close-inspector" id="closeInsp">✕</button>
+        <button class="delete-clip" id="deleteClip">🗑</button>
+      </div>
+    </div>
+    <div class="vol-row">
+      <span style="font-size:12.5px; color: var(--text-dim);">Vol</span>
+      <input type="range" id="volSlider" min="0" max="100" value="100" />
+      <span class="vol-val" id="volVal">100%</span>
+    </div>
+    <p class="hint">Drag the middle to move it. Drag either edge to trim — pull past the section's original end to extend it.</p>
+  </div>
+
+  <div class="library">
+    <span class="library-caption">Preview Area</span>
+    <p class="library-title">Press and drag a section up into either row. Drop it on Vocal for the vocal stem, or Beats for the instrumental. Tap a section to preview it.</p>
+    <div id="songLibrary"></div>
+  </div>
+
+  <div class="cta">
+    <p>Want to do this with your own music instead of ours? The full Tuttii app lets you upload any song and auto-matches everything.</p>
+    <a href="#" id="ctaLink">Get Tuttii →</a>
+  </div>
+
+  <div id="errBanner" style="display:none; position:fixed; left:12px; right:12px; bottom:12px; background:#3a0d1e; border:1px solid #ff7a9c; color:#ffd6e2; font-size:11.5px; padding:10px 12px; border-radius:12px; z-index:9999; line-height:1.5;"></div>
+
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
