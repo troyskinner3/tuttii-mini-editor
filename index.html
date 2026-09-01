@@ -119,8 +119,12 @@
   <div class="app-scroll">
 
   <div class="library">
-    <span class="library-caption">Preview Area</span>
-    <p class="library-title">Drag a section into Vocal or Beats above. Tap to preview it first.</p>
+    <div class="library-tabs" id="libraryTabs">
+      <button class="lib-tab active" data-tab="songs">Songs</button>
+      <button class="lib-tab" data-tab="vocals">Vocals</button>
+      <button class="lib-tab" data-tab="inst">Inst</button>
+      <button class="lib-tab" data-tab="silence">Silence</button>
+    </div>
     <div id="songLibrary"></div>
   </div>
 

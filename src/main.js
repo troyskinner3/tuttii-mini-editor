@@ -62,6 +62,15 @@
   let uidCounter = 1;
   let selectedUid = null;
 
+  // Songs/Vocals/Inst all browse the same song -> section structure; only
+  // the active tab changes what tapping a section previews (both stems /
+  // vocal only / beats only). Dragging into a lane is unaffected by the
+  // tab. Silence is a flat list, not part of the song browsing at all.
+  let activeLibraryTab = "songs";
+  // At most one song's sections are exposed at a time -- expanding a
+  // different song collapses whichever one was open.
+  let expandedSongId = null;
+
   let audioCtx = null;
   let audioUnlocked = false;
   let isPlaying = false;
@@ -101,6 +110,7 @@
   const volSlider = document.getElementById("volSlider");
   const volVal = document.getElementById("volVal");
   const songLibrary = document.getElementById("songLibrary");
+  const libraryTabs = document.getElementById("libraryTabs");
   const exportWavBtn = document.getElementById("exportWavBtn");
   const exportMp3Btn = document.getElementById("exportMp3Btn");
   const ctaLink = document.getElementById("ctaLink");
@@ -185,15 +195,50 @@
     document.addEventListener("pointercancel", onUp);
   });
 
-  // ---------- Library chips (one non-wrapping row per song; chips are stem-agnostic) ----------
-  SONGS.forEach(song => {
+  // ---------- Library (tabbed: Songs / Vocals / Inst / Silence) ----------
+  function previewModeForTab(tab) {
+    return tab === "vocals" ? "vocal" : tab === "inst" ? "beats" : "both";
+  }
+
+  function renderLibrary() {
+    if (previewChipEl) stopPreview(); // clear any preview tied to a chip we're about to remove
+    songLibrary.innerHTML = "";
+
+    if (activeLibraryTab === "silence") {
+      const silHeader = document.createElement("div");
+      silHeader.className = "song-header";
+      silHeader.innerHTML = `
+        <div class="song-thumb silence-thumb">🔇</div>
+        <div class="song-info">
+          <div class="song-title">Silence</div>
+          <div class="song-sub">Add a deliberate pause</div>
+        </div>
+      `;
+      songLibrary.appendChild(silHeader);
+
+      const silRow = document.createElement("div");
+      silRow.className = "chip-row";
+      SILENCE_OPTIONS.forEach(sec => silRow.appendChild(makeChip(sec, "", "both", false)));
+      songLibrary.appendChild(silRow);
+      return;
+    }
+
+    const mode = previewModeForTab(activeLibraryTab);
+    SONGS.forEach(song => {
+      songLibrary.appendChild(
+        song.id === expandedSongId ? buildExpandedSongRow(song, mode) : buildSongSummaryRow(song)
+      );
+    });
+  }
+
+  function buildSongSummaryRow(song) {
     const header = document.createElement("div");
     header.className = "song-header";
     header.innerHTML = `
       <div class="song-thumb" style="background:${song.thumbColor}">${song.thumbIcon}</div>
       <div class="song-info">
         <div class="song-title">${song.name}</div>
-        <div class="song-sub">Drag a section below</div>
+        <div class="song-sub">Tap to view sections</div>
       </div>
       <div class="song-meta">
         <div class="meta-line">100 <span class="sep">·</span> C maj</div>
@@ -202,47 +247,85 @@
       <div class="song-check" title="Pre-matched, ready to drag">
         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
+      <button class="song-expand-btn" title="View sections">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
       <div class="song-match-bar"></div>
     `;
-    songLibrary.appendChild(header);
+    header.addEventListener("click", () => {
+      expandedSongId = song.id;
+      renderLibrary();
+    });
+    return header;
+  }
 
+  // Replaces the song's summary row in place with its sections -- not an
+  // accordion insert below it. Only one song is ever expanded at a time;
+  // the back button (or expanding a different song) collapses it again.
+  function buildExpandedSongRow(song, mode) {
     const row = document.createElement("div");
     row.className = "chip-row";
-    song.sections.forEach(sec => row.appendChild(makeChip(sec, song.name)));
-    songLibrary.appendChild(row);
-  });
+    song.sections.forEach(sec => row.appendChild(makeChip(sec, song.name, mode, true)));
 
-  const silHeader = document.createElement("div");
-  silHeader.className = "song-header";
-  silHeader.innerHTML = `
-    <div class="song-thumb silence-thumb">🔇</div>
-    <div class="song-info">
-      <div class="song-title">Silence</div>
-      <div class="song-sub">Add a deliberate pause</div>
-    </div>
-  `;
-  songLibrary.appendChild(silHeader);
+    const back = document.createElement("button");
+    back.className = "song-back-btn";
+    back.title = "Back to " + song.name;
+    back.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>`;
+    back.addEventListener("click", () => {
+      expandedSongId = null;
+      renderLibrary();
+    });
+    row.appendChild(back);
+    return row;
+  }
 
-  const silRow = document.createElement("div");
-  silRow.className = "chip-row";
-  SILENCE_OPTIONS.forEach(sec => silRow.appendChild(makeChip(sec, "")));
-  songLibrary.appendChild(silRow);
+  // A cheap deterministic hash so each section's decorative mini-waveform
+  // looks distinct but never changes across re-renders.
+  function seedFromId(id) {
+    let s = 0;
+    for (let i = 0; i < id.length; i++) s += id.charCodeAt(i);
+    return s;
+  }
 
-  function makeChip(sec, songName) {
+  function miniWaveHtml(seed) {
+    let html = '<div class="chip-wave">';
+    for (let i = 0; i < 14; i++) {
+      const h = 3 + Math.round(Math.abs(Math.sin(i * 1.7 + seed)) * 13);
+      html += `<span style="height:${h}px"></span>`;
+    }
+    return html + "</div>";
+  }
+
+  // `compact` sections (revealed by expanding a song) show just a bar-count
+  // badge + label + decorative waveform, matching the real app; the flat
+  // Silence list keeps the fuller label/duration/preview-icon chip.
+  function makeChip(sec, songName, mode, compact) {
     const chip = document.createElement("div");
-    chip.className = "section-chip";
+    chip.className = "section-chip" + (compact ? " compact" : "");
     chip.style.touchAction = "none";
-    const playIconHtml = sec.isSilence ? "" : `<span class="chip-play-icon">▶</span>`;
-    chip.innerHTML = `<span class="label">${sec.label}</span>${songName ? `<span class="song">${songName}</span>` : ""}<span class="dur">${sec.durBars} bar${sec.durBars > 1 ? "s" : ""}</span>${playIconHtml}`;
-    chip.addEventListener("pointerdown", (e) => startChipDrag(e, sec, songName, chip));
+    if (compact) {
+      chip.innerHTML = `<span class="chip-bars">${sec.durBars}</span><span class="label">${sec.label}</span>${miniWaveHtml(seedFromId(sec.id))}`;
+    } else {
+      const playIconHtml = sec.isSilence ? "" : `<span class="chip-play-icon">▶</span>`;
+      chip.innerHTML = `<span class="label">${sec.label}</span>${songName ? `<span class="song">${songName}</span>` : ""}<span class="dur">${sec.durBars} bar${sec.durBars > 1 ? "s" : ""}</span>${playIconHtml}`;
+    }
+    chip.addEventListener("pointerdown", (e) => startChipDrag(e, sec, songName, chip, mode || "both"));
     return chip;
   }
+
+  libraryTabs.addEventListener("click", (e) => {
+    const btn = e.target.closest(".lib-tab");
+    if (!btn || btn.classList.contains("active")) return;
+    activeLibraryTab = btn.dataset.tab;
+    libraryTabs.querySelectorAll(".lib-tab").forEach(b => b.classList.toggle("active", b === btn));
+    renderLibrary();
+  });
 
   // ---------- Drag-and-drop from library into timeline ----------
   // Sections carry no stem type of their own — whichever lane the chip is dropped
   // into (Vocal or Beats) decides which stem gets added. The ghost's color updates
   // live as you drag over each lane, previewing which stem you're about to place.
-  function startChipDrag(e, sec, songName, chipEl) {
+  function startChipDrag(e, sec, songName, chipEl, mode) {
     const startX = e.clientX, startY = e.clientY;
     const pointerId = e.pointerId;
     let dragging = false;
@@ -324,7 +407,7 @@
       } else {
         // A tap with no meaningful movement — preview this section instead
         // of placing it. Silence has nothing to preview.
-        if (!sec.isSilence) togglePreview(sec, chipEl);
+        if (!sec.isSilence) togglePreview(sec, chipEl, mode);
       }
     }
 
@@ -815,7 +898,10 @@
     pause(); // also halts main timeline playback if it happened to be running
   }
 
-  function togglePreview(sec, chipEl) {
+  // mode: "both" (Songs tab -- reconstructs the full mix from both stems),
+  // "vocal" (Vocals tab), or "beats" (Inst tab). Drag-and-drop into a lane
+  // is unaffected by this -- only what tapping previews.
+  function togglePreview(sec, chipEl, mode) {
     const wasThisOne = previewChipEl === chipEl;
     stopPreview();
     if (wasThisOne) return; // tapping the already-playing chip just stops it
@@ -827,8 +913,8 @@
     const fakeClip = { root: sec.root || 220, volume: 0.9 };
     const durSec = barsToSeconds(sec.durBars);
     const startAt = ctx.currentTime + 0.05;
-    scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
-    scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
+    if (mode !== "beats") scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
+    if (mode !== "vocal") scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
 
     chipEl.classList.add("playing");
     const icon = chipEl.querySelector(".chip-play-icon");
@@ -1074,6 +1160,7 @@
   ctaLink.addEventListener("click", (e) => e.preventDefault());
 
   // ---------- Init ----------
+  renderLibrary();
   createClip(SONGS[0].sections[0], "vocal", SONGS[0].name);
   createClip(SONGS[0].sections[0], "beats", SONGS[0].name);
   selectedUid = null;

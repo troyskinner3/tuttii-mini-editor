@@ -475,21 +475,25 @@
     border-radius: 18px;
     padding: 12px 12px 14px;
   }
-  .library-caption {
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-dim);
-    display: block;
-    margin-bottom: 4px;
+  .library-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    margin-bottom: 10px;
   }
-  .library-title {
-    font-size: 12px;
+  .lib-tab {
+    background: none;
+    border: 1px solid transparent;
     color: var(--text-dim);
-    margin-bottom: 6px;
-    line-height: 1.4;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 15px;
+    border-radius: 999px;
+    cursor: pointer;
+    flex-shrink: 0;
   }
+  .lib-tab.active { color: var(--pink); border-color: var(--pink); background: rgba(232,75,198,0.1); }
   .song-header {
     display: flex;
     align-items: center;
@@ -501,6 +505,7 @@
     border: 1px solid var(--border);
     position: relative;
     overflow: hidden;
+    cursor: pointer;
   }
   .song-header:first-child { margin-top: 0; }
   .song-thumb {
@@ -539,6 +544,16 @@
     flex-shrink: 0;
   }
   .song-check svg { width: 12px; height: 12px; }
+  .song-expand-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 2px;
+    cursor: pointer;
+  }
+  .song-expand-btn svg { width: 16px; height: 16px; }
   .song-match-bar {
     position: absolute;
     right: 0; top: 8px; bottom: 8px;
@@ -596,6 +611,48 @@
     border-color: var(--violet);
     color: white;
   }
+
+  /* Compact section cards, shown in place of a song's summary row once
+     it's expanded -- just a bar-count badge, label, and a decorative
+     waveform, matching the real app's drill-in view. */
+  .section-chip.compact { padding: 9px 10px; min-width: 76px; }
+  .section-chip.compact .label { font-size: 12px; }
+  .chip-bars {
+    position: absolute;
+    top: 7px; right: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-dim);
+    background: var(--ink-2);
+    border-radius: 999px;
+    padding: 1px 6px;
+  }
+  .section-chip.compact .chip-wave {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1px;
+    height: 16px;
+    margin-top: 8px;
+  }
+  .section-chip.compact .chip-wave span {
+    width: 2px;
+    flex-shrink: 0;
+    border-radius: 1px;
+    background: rgba(243,238,255,0.32);
+  }
+  .song-back-btn {
+    flex-shrink: 0;
+    width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .song-back-btn svg { width: 15px; height: 15px; }
 
   /* Drag ghost */
   .drag-ghost {
