@@ -197,7 +197,10 @@
         <div class="song-title">${song.name}</div>
         <div class="song-sub">Drag a section below</div>
       </div>
-      <div class="song-meta"><div class="bpm">100</div><div class="key">C maj</div></div>
+      <div class="song-meta">
+        <div class="meta-line">100 <span class="sep">·</span> C maj</div>
+        <div class="segments">${song.sections.length} segments</div>
+      </div>
       <div class="song-check" title="Pre-matched, ready to drag">
         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
