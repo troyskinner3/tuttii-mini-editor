@@ -23,26 +23,41 @@ design spec and decision log.
   stem playback. Data model decided: one vocal stem + one instrumental
   stem per song (WAV, not MP3 — avoids MP3 encoder lead-in silence, which
   would break bar-accurate scheduling), plus a shared per-song sections
-  list (`startSec`/`endSec`) used for both lanes. Trim can pull into the
-  full stem length on either edge (not bounded to neighboring sections).
-  BPM/Key stay locked — the source audio must already be pre-matched to a
-  single common BPM/key before export; the app does no time-stretching or
-  pitch-shifting.
+  list used for both lanes. Trim can pull into the full stem length on
+  either edge (not bounded to neighboring sections). BPM/Key stay
+  locked in the toolbar — the app itself still does zero live
+  time-stretching or pitch-shifting.
 
-  **Song 1 — "Be With You" (Duke Dylan), BPM 117:**
-  - Section timestamps: received and verified (all sections divide into
-    clean 4- or 8-bar lengths at 117 BPM — format is minutes:seconds:ms).
-  - **Key: still needed** — user will provide.
-  - **Audio files: not yet received.** GitHub's browser uploader caps at
-    25MB and the stems are ~36.7MB each; agreed to switch to Google
-    Drive instead (already connected in this session) rather than a git
-    command-line workaround.
-  - Not yet built: the `src/data/songs/*.json` schema, `src/audio/engine.js`
-    (preload + real `AudioBufferSourceNode` playback), or the swap in
-    `scheduleVocal()`/`scheduleBeats()`. Waiting on the audio files before
-    starting this, since it needs real files to test against.
+  **Preview-vs-timeline audio (new decision):** each song's library
+  preview should sound like its own native BPM/key, while placing a
+  section on the timeline should sound matched to the project's locked
+  BPM/key — so users can hear the "before/after" of Tuttii's matching.
+  Achieved with **two pre-rendered exports per stem** (native + already
+  matched-to-project), not live DSP: preview plays the native buffer,
+  the timeline plays the matched buffer. Section timestamps only need
+  to be measured once, against the native file — matched-version
+  timestamps are derived from bar counts × the project's bar length,
+  since a correct time-stretch preserves bar structure. This roughly
+  doubles the stem files needed per song (native pair + matched pair)
+  but adds no real engineering risk.
 
-  **Songs 2 & 3:** not yet sent (user is preparing song 2 alongside song 1).
+  **Song 1 — "Be With You" (Duke Dylan):**
+  - Native: BPM 117, **Key: A major** (confirmed).
+  - Section timestamps: received and verified against the native file
+    (all sections divide into clean 4- or 8-bar lengths at 117 BPM).
+  - **Project BPM likely 120** (not finalized). **Project key: TBD**,
+    depends on songs 2 & 3.
+  - **Audio files: not yet received** (now need native + matched pairs
+    per the decision above). Hand-off is via Google Drive (GitHub's
+    browser uploader caps at 25MB; stems run ~36.7MB each).
+  - Not yet built: the `src/data/songs/*.json` schema (now needs native
+    + matched stem paths per song), `src/audio/engine.js` (preload +
+    real `AudioBufferSourceNode` playback, dual-buffer aware), or the
+    swap in `scheduleVocal()`/`scheduleBeats()`. Waiting on the audio
+    files before starting, since it needs real files to test against.
+
+  **Songs 2 & 3:** not yet sent (user is preparing them alongside song 1;
+  project key depends on what they turn out to be).
 
 - **Pass 3 (optional):** split `src/main.js` into smaller modules.
 
