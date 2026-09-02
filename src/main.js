@@ -113,7 +113,6 @@
   const libraryTabs = document.getElementById("libraryTabs");
   const exportWavBtn = document.getElementById("exportWavBtn");
   const exportMp3Btn = document.getElementById("exportMp3Btn");
-  const ctaLink = document.getElementById("ctaLink");
   const errBanner = document.getElementById("errBanner");
 
   function showJsError(msg) {
@@ -1157,7 +1156,6 @@
 
   exportWavBtn.addEventListener("click", exportWav);
   exportMp3Btn.addEventListener("click", exportMp3);
-  ctaLink.addEventListener("click", (e) => e.preventDefault());
 
   // ---------- Init ----------
   renderLibrary();
