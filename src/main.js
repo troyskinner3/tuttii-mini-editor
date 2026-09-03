@@ -148,6 +148,7 @@
   let playheadBar = 0;
   let scheduledNodes = [];
   let rafId = null;
+  let lastScheduleInfo = "none"; // temporary diagnostic, see updateDebugReadout
 
   let history = [];
   let historyIndex = -1;
@@ -202,7 +203,7 @@
   document.body.appendChild(debugEl);
   function updateDebugReadout() {
     const ctx = audioCtx;
-    debugEl.textContent = `ctx:${ctx ? ctx.state : "none"} sr:${ctx ? ctx.sampleRate : "-"} baseLatency:${ctx ? ctx.baseLatency : "-"} unlocked:${audioUnlocked} nodes:${scheduledNodes.length} playing:${isPlaying} ua:${navigator.userAgent.slice(0, 60)}`;
+    debugEl.textContent = `ctx:${ctx ? ctx.state : "none"} sr:${ctx ? ctx.sampleRate : "-"} unlocked:${audioUnlocked} nodes:${scheduledNodes.length} playing:${isPlaying}\nlast: ${lastScheduleInfo}`;
   }
   setInterval(updateDebugReadout, 400);
   updateDebugReadout();
@@ -982,6 +983,19 @@
   // that buffer, set when the section was dropped and adjusted by trimming;
   // offsetIntoClipSec additionally shifts the read point when playback
   // starts partway through the clip (e.g. the playhead was scrubbed into it).
+  // TEMPORARY diagnostic: sparse-sampled peak amplitude of a decoded buffer,
+  // to check whether WebKit actually decoded real audio data or silently
+  // produced a buffer of near-zero samples for these MP3s specifically.
+  function bufferPeak(buf) {
+    const ch = buf.getChannelData(0);
+    let peak = 0;
+    for (let i = 0; i < ch.length; i += 61) {
+      const v = Math.abs(ch[i]);
+      if (v > peak) peak = v;
+    }
+    return peak;
+  }
+
   function scheduleRealClip(ctx, dest, clip, at, dur, offsetIntoClipSec) {
     const song = SONGS.find(s => s.id === clip.songId);
     const buf = song && song._matched.buffers ? song._matched.buffers[clip.track] : null;
@@ -997,6 +1011,7 @@
     src.connect(gain).connect(dest);
     src.start(at, srcOffset, playDur);
     scheduledNodes.push(src);
+    lastScheduleInfo = `real clip: vol:${clip.volume} peak:${bufferPeak(buf).toFixed(4)} dur:${buf.duration.toFixed(1)} ch:${buf.numberOfChannels} destGain:${dest === ctx.destination ? "ctx.destination" : "other"}`;
   }
 
   function scheduleVocal(ctx, dest, clip, at, dur) {
@@ -1123,6 +1138,7 @@
     src.connect(gain).connect(dest);
     src.start(at);
     scheduledNodes.push(src);
+    lastScheduleInfo = `preview: vol:${volume} peak:${bufferPeak(buffer).toFixed(4)} dur:${buffer.duration.toFixed(1)} ch:${buffer.numberOfChannels}`;
   }
 
   // ---------- Section preview (tap a chip in the Preview Area) ----------
