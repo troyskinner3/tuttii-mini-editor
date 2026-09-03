@@ -100,6 +100,42 @@ design spec and decision log.
   inside `commitHistory()`, `undo()`, and `redo()`) was simpler and
   avoids the whole bug class.
 
+  **Mobile audio (resolved, real device confirmed).** iPhone Chrome
+  (WebKit under the hood, same audio rules as Safari) produced no sound
+  at all, from the very first load, no error banner. Diagnosed with a
+  temporary on-screen debug readout showing the live `AudioContext`
+  state directly off the real device (since none of this is
+  reproducible in Chromium/Playwright — WebKit-specific behavior).
+  Turned out to be two separate, real bugs, both now fixed and confirmed
+  working on-device:
+  - `togglePreview()` fired `ctx.resume()` without awaiting it before
+    scheduling (unlike `play()`, which already did this correctly) —
+    could schedule nodes on a context not yet actually running.
+    `ensureAudioReady()` now centralizes this for both call sites, and
+    also recreates the context outright after it comes back "zombified"
+    from being backgrounded (resume() claims success, but the clock
+    never actually resumes) rather than trusting resume() to work.
+  - The real, deeper cause of total silence: a raw `AudioContext`'s
+    default output is "ambient" audio on iOS, which the ring/silent
+    switch is allowed to mute outright — confirmed via the debug
+    readout showing a healthy running context, a genuinely scheduled
+    node, and decoded buffers carrying real (non-silent, peak ~0.3-1.0)
+    samples, yet still nothing audible. Real `<audio>`/`<video>`
+    playback isn't subject to that. First fix (routing the whole graph
+    through a `MediaStreamAudioDestinationNode` into an `<audio>`
+    element) produced real sound but glitched/stuttered consistently —
+    a known WebKit instability with that combination. Final fix:
+    `ensureSilentLoop()` leaves the main graph on `ctx.destination`
+    entirely untouched, and separately loops a tiny silent WAV through
+    an independent `<audio src>` element purely to claim the page's
+    audio session as "playback" category — iOS applies that page-wide,
+    not per-source, so the main graph benefits without its signal path
+    ever touching the fragile bridge.
+  - Also stops iOS's native text-selection UI (the blue circle-handle)
+    from hijacking drags on `.clip`/`.section-chip`/`.handle` —
+    `touch-action: none` alone doesn't block that; needs
+    `-webkit-touch-callout: none` + `user-select: none` too.
+
   **Preview deploy:** this branch is directly servable as a static
   site with no build step — `index.html` and the stem paths in
   `src/main.js` use plain relative paths (no leading slash), which

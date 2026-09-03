@@ -148,8 +148,7 @@
   let playheadBar = 0;
   let scheduledNodes = [];
   let rafId = null;
-  let lastScheduleInfo = "none"; // temporary diagnostic, see updateDebugReadout
-  let masterOutCache = null; // { ctx, el } -- see ensureSilentLoop() below
+  let masterOutCache = null; // { el } -- see ensureSilentLoop() below
 
   let history = [];
   let historyIndex = -1;
@@ -193,22 +192,6 @@
   errBanner.addEventListener("click", () => { errBanner.style.display = "none"; });
   window.addEventListener("error", (e) => showJsError(e.message + " (line " + e.lineno + ")"));
   window.addEventListener("unhandledrejection", (e) => showJsError(String(e.reason)));
-
-  // TEMPORARY diagnostic overlay -- mobile audio has been reported dead with
-  // no JS errors at all, meaning fetch/decode/scheduling all silently
-  // "succeed" while nothing is audible. This surfaces the actual live
-  // AudioContext state so it can be read directly off a real device instead
-  // of guessing blind. Safe to remove once the real cause is confirmed.
-  const debugEl = document.createElement("div");
-  debugEl.id = "debugOverlay";
-  debugEl.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font:10px monospace;padding:3px 6px;white-space:pre-wrap;pointer-events:none;";
-  document.body.appendChild(debugEl);
-  function updateDebugReadout() {
-    const ctx = audioCtx;
-    debugEl.textContent = `ctx:${ctx ? ctx.state : "none"} sr:${ctx ? ctx.sampleRate : "-"} unlocked:${audioUnlocked} nodes:${scheduledNodes.length} playing:${isPlaying} ${audioElInfo()}\nlast: ${lastScheduleInfo}`;
-  }
-  setInterval(updateDebugReadout, 400);
-  updateDebugReadout();
 
   const LABEL_W = 66;
   const contentWidth = barsToPx(TOTAL_BARS);
@@ -920,11 +903,6 @@
     el.play().catch(() => {});
     masterOutCache = { el };
   }
-  function audioElInfo() {
-    const el = masterOutCache && masterOutCache.el;
-    if (!el) return "audioEl:none";
-    return `audioEl.paused:${el.paused} audioEl.muted:${el.muted} audioEl.vol:${el.volume} audioEl.readyState:${el.readyState}`;
-  }
 
   // iOS/WKWebView unlock: must create + start a real buffer source inside a user gesture
   // before any subsequently-scheduled audio will be audible. Attempted silently in the
@@ -1021,19 +999,6 @@
   // that buffer, set when the section was dropped and adjusted by trimming;
   // offsetIntoClipSec additionally shifts the read point when playback
   // starts partway through the clip (e.g. the playhead was scrubbed into it).
-  // TEMPORARY diagnostic: sparse-sampled peak amplitude of a decoded buffer,
-  // to check whether WebKit actually decoded real audio data or silently
-  // produced a buffer of near-zero samples for these MP3s specifically.
-  function bufferPeak(buf) {
-    const ch = buf.getChannelData(0);
-    let peak = 0;
-    for (let i = 0; i < ch.length; i += 61) {
-      const v = Math.abs(ch[i]);
-      if (v > peak) peak = v;
-    }
-    return peak;
-  }
-
   function scheduleRealClip(ctx, dest, clip, at, dur, offsetIntoClipSec) {
     const song = SONGS.find(s => s.id === clip.songId);
     const buf = song && song._matched.buffers ? song._matched.buffers[clip.track] : null;
@@ -1049,7 +1014,6 @@
     src.connect(gain).connect(dest);
     src.start(at, srcOffset, playDur);
     scheduledNodes.push(src);
-    lastScheduleInfo = `real clip: vol:${clip.volume} peak:${bufferPeak(buf).toFixed(4)} dur:${buf.duration.toFixed(1)} ch:${buf.numberOfChannels} ${audioElInfo()}`;
   }
 
   function scheduleVocal(ctx, dest, clip, at, dur) {
@@ -1176,7 +1140,6 @@
     src.connect(gain).connect(dest);
     src.start(at);
     scheduledNodes.push(src);
-    lastScheduleInfo = `preview: vol:${volume} peak:${bufferPeak(buffer).toFixed(4)} dur:${buffer.duration.toFixed(1)} ch:${buffer.numberOfChannels} ${audioElInfo()}`;
   }
 
   // ---------- Section preview (tap a chip in the Preview Area) ----------
