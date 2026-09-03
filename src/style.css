@@ -183,6 +183,13 @@
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
+    /* Without this, two fingers landing anywhere in the timeline (not just on
+       a .clip/.handle, which already set touch-action:none) get claimed by
+       the browser's own pinch-to-zoom-the-page gesture before our pointer
+       handlers ever get a shot at them -- pan-x keeps native single-finger
+       scroll working here while telling the browser pinch-zoom isn't this
+       element's to take. */
+    touch-action: pan-x;
   }
   .scroll-inner {
     position: relative;
