@@ -192,6 +192,21 @@
   window.addEventListener("error", (e) => showJsError(e.message + " (line " + e.lineno + ")"));
   window.addEventListener("unhandledrejection", (e) => showJsError(String(e.reason)));
 
+  // TEMPORARY diagnostic overlay -- mobile audio has been reported dead with
+  // no JS errors at all, meaning fetch/decode/scheduling all silently
+  // "succeed" while nothing is audible. This surfaces the actual live
+  // AudioContext state so it can be read directly off a real device instead
+  // of guessing blind. Safe to remove once the real cause is confirmed.
+  const debugEl = document.createElement("div");
+  debugEl.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font:10px monospace;padding:3px 6px;white-space:pre-wrap;pointer-events:none;";
+  document.body.appendChild(debugEl);
+  function updateDebugReadout() {
+    const ctx = audioCtx;
+    debugEl.textContent = `ctx:${ctx ? ctx.state : "none"} sr:${ctx ? ctx.sampleRate : "-"} baseLatency:${ctx ? ctx.baseLatency : "-"} unlocked:${audioUnlocked} nodes:${scheduledNodes.length} playing:${isPlaying} ua:${navigator.userAgent.slice(0, 60)}`;
+  }
+  setInterval(updateDebugReadout, 400);
+  updateDebugReadout();
+
   const LABEL_W = 66;
   const contentWidth = barsToPx(TOTAL_BARS);
   scrollInner.style.width = (LABEL_W + contentWidth) + "px";
