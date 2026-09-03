@@ -49,22 +49,6 @@
   ];
 
   const SONGS = [
-    {
-      id: "A", name: "Neon Drive", thumbColor: "linear-gradient(135deg, #4FD1E8, #A055D5)", thumbIcon: "🎵",
-      sections: [
-        { id: "A-1", label: "Intro 1",  durBars: 2, root: 349.23 },
-        { id: "A-2", label: "Verse 1",  durBars: 4, root: 392.00 },
-        { id: "A-3", label: "Chorus 1", durBars: 4, root: 440.00 },
-      ],
-    },
-    {
-      id: "B", name: "Afterglow", thumbColor: "linear-gradient(135deg, #E84BC6, #A055D5)", thumbIcon: "🎶",
-      sections: [
-        { id: "B-1", label: "Intro 1",  durBars: 2, root: 261.63 },
-        { id: "B-2", label: "Verse 1",  durBars: 4, root: 293.66 },
-        { id: "B-3", label: "Chorus 1", durBars: 4, root: 329.63 },
-      ],
-    },
     // Real audio: a continuous native-tempo stem pair for library preview,
     // plus a second pair already time/pitch-matched to the locked project
     // BPM/key for timeline playback. See the derivation pass just below --
@@ -556,24 +540,6 @@
     commitHistory();
   }
 
-  function createClip(sec, type, songName) {
-    const clip = {
-      uid: uidCounter++,
-      track: type,
-      label: sec.label,
-      songName: songName,
-      root: sec.root || 220,
-      position: 0,
-      duration: sec.durBars,
-      volume: 1,
-    };
-    clips[type].push(clip);
-    layout(type);
-    renderClips();
-    selectClip(clip.uid);
-    commitHistory();
-  }
-
   // ---------- Render clips ----------
   function renderClips() {
     vocalLane.querySelectorAll(".clip").forEach(el => el.remove());
@@ -880,15 +846,8 @@
     inspector.classList.remove("show");
     playheadBar = 0;
 
-    const seedSec = SONGS[0].sections[0];
-    const makeSeed = (type) => ({
-      uid: uidCounter++, track: type, label: seedSec.label, songName: SONGS[0].name,
-      root: seedSec.root, position: 0, duration: seedSec.durBars, volume: 1, isSilence: false,
-    });
-    clips.vocal = [makeSeed("vocal")];
-    clips.beats = [makeSeed("beats")];
-    layout("vocal");
-    layout("beats");
+    clips.vocal = [];
+    clips.beats = [];
 
     renderClips();
     updatePlayheadEl();
@@ -1374,8 +1333,8 @@
 
   // ---------- Init ----------
   renderLibrary();
-  createClip(SONGS[0].sections[0], "vocal", SONGS[0].name);
-  createClip(SONGS[0].sections[0], "beats", SONGS[0].name);
+  renderClips();
+  commitHistory();
   selectedUid = null;
   document.querySelectorAll(".clip").forEach(el => el.classList.remove("selected"));
   inspector.classList.remove("show");
