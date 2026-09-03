@@ -1215,6 +1215,17 @@
 
   async function play() {
     const ctx = await ensureAudioReady();
+
+    // A real clip whose matched audio hasn't finished loading yet would
+    // otherwise schedule nothing at all for it, silently (scheduleRealClip
+    // just no-ops without a buffer) -- wait for whatever's actually on the
+    // timeline right now rather than assuming it's ready.
+    const songIds = new Set([...clips.vocal, ...clips.beats].map(c => c.songId).filter(Boolean));
+    await Promise.all([...songIds].map(id => {
+      const song = SONGS.find(s => s.id === id);
+      return song ? preloadMatched(song).catch(() => {}) : null;
+    }));
+
     stopAllNodes();
     const end = timelineEndBars();
     if (playheadBar >= end) playheadBar = 0;
