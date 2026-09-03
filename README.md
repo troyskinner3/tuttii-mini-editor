@@ -65,17 +65,40 @@ design spec and decision log.
 
   **Stem format: MP3, not WAV.** Originally shipped as WAV specifically to
   avoid MP3 encoder lead-in silence breaking bar-accurate scheduling.
-  Switched to 192kbps MP3 after empirically verifying (via ffmpeg +
+  Switched to MP3 after empirically verifying (via ffmpeg +
   Playwright/Chromium `decodeAudioData` on the actual stem files, not
   just a short test clip) that decoded duration and native/matched
   ratios match the mathematically-derived scale factor to within
-  0.0002s across full ~3-minute files — no meaningful drift. Cut total
-  stem size from ~390MB to ~34MB (roughly 11x). **Caveat:** only
-  verified in Chromium; Safari has a documented history of MP3 gapless
-  decode quirks, so worth a spot-check on a real iPhone before final
-  launch, though not blocking for internal review. Stem paths live at
-  `public/audio/<song>/*.mp3`, mirrored (same content, git-deduped) at
-  a top-level `audio/` for GitHub Pages' raw-tree serving — see below.
+  0.0002s across full ~3-minute files — no meaningful drift. **Caveat:**
+  only verified in Chromium; Safari has a documented history of MP3
+  gapless decode quirks, so worth a spot-check on a real iPhone before
+  final launch, though not blocking for internal review.
+
+  **Loading model — per-section preview slices.** Preloading the whole
+  native stem pair per song (even after switching to MP3) still meant
+  several MB before any section could be previewed — measured ~58s to
+  ready on a throttled ~1.5Mbps connection. Since library preview always
+  plays a section's exact, never-trimmed window, there was never a real
+  reason to need the whole song for it: each section is now pre-sliced
+  (at build time, from the original masters) into its own tiny MP3 —
+  `public/audio/<song>/sections/<sectionId>-<vocal|beats>.mp3`, a few
+  hundred KB — fetched and decoded lazily, only on first tap of that
+  chip. Measured result on the same throttled connection: ~2.8s for the
+  longest section, ~280ms on a normal connection. The matched (timeline)
+  pair is unchanged — one whole-file pair per song at 128kbps
+  (`<song>/matched-{vocal,beats}.mp3`), still lazy-loaded on first drop,
+  since trimming can extend a clip into the full matched stem. Total
+  repo audio: ~22MB (down from ~390MB as WAV). All of it is mirrored
+  (same content, git-deduped so no extra data) at a top-level `audio/`
+  for GitHub Pages' raw-tree serving — see below.
+
+  **Playback pauses on edit.** Editing the timeline (drop, move, trim,
+  duplicate, delete, volume, undo, redo) while playback is running used
+  to leave audio playing against a stale snapshot of the timeline, out
+  of sync with what's now on screen. Live-updating in-progress playback
+  to match was the other option; pausing (via a single `pause()` call
+  inside `commitHistory()`, `undo()`, and `redo()`) was simpler and
+  avoids the whole bug class.
 
   **Preview deploy:** this branch is directly servable as a static
   site with no build step — `index.html` and the stem paths in
