@@ -149,6 +149,7 @@
   let scheduledNodes = [];
   let rafId = null;
   let lastScheduleInfo = "none"; // temporary diagnostic, see updateDebugReadout
+  let masterOutCache = null; // { ctx, node, el } -- see getMasterOut() below
 
   let history = [];
   let historyIndex = -1;
@@ -199,11 +200,12 @@
   // AudioContext state so it can be read directly off a real device instead
   // of guessing blind. Safe to remove once the real cause is confirmed.
   const debugEl = document.createElement("div");
+  debugEl.id = "debugOverlay";
   debugEl.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font:10px monospace;padding:3px 6px;white-space:pre-wrap;pointer-events:none;";
   document.body.appendChild(debugEl);
   function updateDebugReadout() {
     const ctx = audioCtx;
-    debugEl.textContent = `ctx:${ctx ? ctx.state : "none"} sr:${ctx ? ctx.sampleRate : "-"} unlocked:${audioUnlocked} nodes:${scheduledNodes.length} playing:${isPlaying}\nlast: ${lastScheduleInfo}`;
+    debugEl.textContent = `ctx:${ctx ? ctx.state : "none"} sr:${ctx ? ctx.sampleRate : "-"} unlocked:${audioUnlocked} nodes:${scheduledNodes.length} playing:${isPlaying} ${audioElInfo()}\nlast: ${lastScheduleInfo}`;
   }
   setInterval(updateDebugReadout, 400);
   updateDebugReadout();
@@ -889,6 +891,35 @@
     return audioCtx;
   }
 
+  // iOS treats a raw AudioContext's default output as "ambient" audio, which
+  // the ring/silent switch is allowed to mute outright -- confirmed on a
+  // real device: context running, a node genuinely scheduled, decoded
+  // buffers carrying real (non-silent) samples, yet total silence. Real
+  // <audio>/<video> playback is categorized differently and isn't subject
+  // to that. So: route the whole graph's output through a real <audio>
+  // element via a MediaStreamAudioDestinationNode instead of straight to
+  // ctx.destination. Cached (declared up with the other audio state) per
+  // context instance, recreated alongside it, e.g. after the
+  // background/return context-replacement above.
+  function getMasterOut(ctx) {
+    if (masterOutCache && masterOutCache.ctx === ctx) return masterOutCache.node;
+    const node = ctx.createMediaStreamDestination();
+    const el = (masterOutCache && masterOutCache.el) || document.createElement("audio");
+    el.autoplay = true;
+    el.playsInline = true;
+    el.style.display = "none";
+    if (!el.isConnected) document.body.appendChild(el);
+    el.srcObject = node.stream;
+    el.play().catch(() => {});
+    masterOutCache = { ctx, node, el };
+    return node;
+  }
+  function audioElInfo() {
+    const el = masterOutCache && masterOutCache.el;
+    if (!el) return "audioEl:none";
+    return `audioEl.paused:${el.paused} audioEl.muted:${el.muted} audioEl.vol:${el.volume} audioEl.readyState:${el.readyState}`;
+  }
+
   // iOS/WKWebView unlock: must create + start a real buffer source inside a user gesture
   // before any subsequently-scheduled audio will be audible. Attempted silently in the
   // background (on first touch, and again on Play) — no visible UI for this in the real
@@ -900,7 +931,7 @@
       const buf = ctx.createBuffer(1, 1, 22050);
       const src = ctx.createBufferSource();
       src.buffer = buf;
-      src.connect(ctx.destination);
+      src.connect(getMasterOut(ctx));
       src.start(0);
     } catch (err) {
       return;
@@ -1011,7 +1042,7 @@
     src.connect(gain).connect(dest);
     src.start(at, srcOffset, playDur);
     scheduledNodes.push(src);
-    lastScheduleInfo = `real clip: vol:${clip.volume} peak:${bufferPeak(buf).toFixed(4)} dur:${buf.duration.toFixed(1)} ch:${buf.numberOfChannels} destGain:${dest === ctx.destination ? "ctx.destination" : "other"}`;
+    lastScheduleInfo = `real clip: vol:${clip.volume} peak:${bufferPeak(buf).toFixed(4)} dur:${buf.duration.toFixed(1)} ch:${buf.numberOfChannels} ${audioElInfo()}`;
   }
 
   function scheduleVocal(ctx, dest, clip, at, dur) {
@@ -1138,7 +1169,7 @@
     src.connect(gain).connect(dest);
     src.start(at);
     scheduledNodes.push(src);
-    lastScheduleInfo = `preview: vol:${volume} peak:${bufferPeak(buffer).toFixed(4)} dur:${buffer.duration.toFixed(1)} ch:${buffer.numberOfChannels}`;
+    lastScheduleInfo = `preview: vol:${volume} peak:${bufferPeak(buffer).toFixed(4)} dur:${buffer.duration.toFixed(1)} ch:${buffer.numberOfChannels} ${audioElInfo()}`;
   }
 
   // ---------- Section preview (tap a chip in the Preview Area) ----------
@@ -1189,7 +1220,7 @@
         .then(buffers => {
           if (previewChipEl !== chipEl) return; // stopped or replaced before this resolved
           const startAt = ctx.currentTime + 0.05;
-          buffers.forEach(buf => schedulePreviewBuffer(ctx, ctx.destination, buf, startAt, 0.9));
+          buffers.forEach(buf => schedulePreviewBuffer(ctx, getMasterOut(ctx), buf, startAt, 0.9));
           if (icon) icon.textContent = "⏸";
           const durSec = buffers[0].duration;
           previewTimeoutId = setTimeout(() => { if (previewChipEl === chipEl) stopPreview(); }, durSec * 1000 + 80);
@@ -1204,8 +1235,8 @@
     const fakeClip = { root: sec.root || 220, volume: 0.9 };
     const durSec = barsToSeconds(sec.durBars);
     const startAt = ctx.currentTime + 0.05;
-    if (mode !== "beats") scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
-    if (mode !== "vocal") scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
+    if (mode !== "beats") scheduleVocal(ctx, getMasterOut(ctx), fakeClip, startAt, durSec);
+    if (mode !== "vocal") scheduleBeats(ctx, getMasterOut(ctx), fakeClip, startAt, durSec);
     if (icon) icon.textContent = "⏸";
     previewTimeoutId = setTimeout(() => {
       if (previewChipEl === chipEl) stopPreview();
@@ -1255,7 +1286,7 @@
       const offsetIntoClipBars = Math.max(0, playheadBar - clip.position);
       const startDelaySec = Math.max(0, barsToSeconds(clip.position - playheadBar));
       const playDurSec = barsToSeconds(clip.duration - offsetIntoClipBars);
-      scheduleClip(ctx, ctx.destination, clip, playStartCtxTime + startDelaySec, playDurSec, barsToSeconds(offsetIntoClipBars));
+      scheduleClip(ctx, getMasterOut(ctx), clip, playStartCtxTime + startDelaySec, playDurSec, barsToSeconds(offsetIntoClipBars));
     });
 
     isPlaying = true;
