@@ -3,9 +3,12 @@
 
   // ---------- Timing model ----------
   // Everything positional (clip.position, clip.duration, playheadPos) is in BARS.
-  // Bars convert to seconds only for audio scheduling, using a fixed demo tempo.
-  const BPM = 100;
-  const BAR_SECONDS = (60 / BPM) * 4; // 4/4 time -> 2.4s per bar
+  // Bars convert to seconds only for audio scheduling, using the locked
+  // project tempo -- every song's "matched" audio is pre-rendered to this
+  // same BPM/key, so the whole timeline can share one BAR_SECONDS constant.
+  const PROJECT_BPM = 120;
+  const PROJECT_KEY = "G# maj";
+  const BAR_SECONDS = (60 / PROJECT_BPM) * 4; // 4/4 time -> 2s per bar
   const BAR_PX = 28;
   const TOTAL_BARS = 32;
   const MIN_DUR_BARS = 1;
@@ -55,7 +58,78 @@
         { id: "B-3", label: "Chorus 1", durBars: 4, root: 329.63 },
       ],
     },
+    // Real audio: a continuous native-tempo stem pair for library preview,
+    // plus a second pair already time/pitch-matched to the locked project
+    // BPM/key for timeline playback. See the derivation pass just below --
+    // durBars and the matched-timeline timestamps are both computed from
+    // these native measurements, not stored separately.
+    {
+      id: "bwy", name: "Be With You", artist: "Duke Dylan",
+      thumbColor: "linear-gradient(135deg, #FDBB2D, #FF6B6B)", thumbIcon: "🎧",
+      isReal: true,
+      nativeBpm: 117, nativeKey: "A maj",
+      stems: {
+        native: { vocal: "/audio/be-with-you/native-vocal.wav", beats: "/audio/be-with-you/native-instrumental.wav" },
+        matched: { vocal: "/audio/be-with-you/matched-vocal.wav", beats: "/audio/be-with-you/matched-instrumental.wav" },
+      },
+      sections: [
+        { id: "bwy-1",  label: "Intro 1",      nativeStart: 1.026,   nativeEnd: 17.436 },
+        { id: "bwy-2",  label: "Verse 1",      nativeStart: 17.436,  nativeEnd: 33.846 },
+        { id: "bwy-3",  label: "Pre-Chorus 1", nativeStart: 33.846,  nativeEnd: 42.051 },
+        { id: "bwy-4",  label: "Chorus 1",     nativeStart: 42.051,  nativeEnd: 58.462 },
+        { id: "bwy-5",  label: "Build 1",      nativeStart: 58.462,  nativeEnd: 74.872 },
+        { id: "bwy-6",  label: "Drop 1",       nativeStart: 74.872,  nativeEnd: 91.282 },
+        { id: "bwy-7",  label: "Verse 2",      nativeStart: 91.282,  nativeEnd: 107.692 },
+        { id: "bwy-8",  label: "Pre-Chorus 2", nativeStart: 107.692, nativeEnd: 115.897 },
+        { id: "bwy-9",  label: "Chorus 2",     nativeStart: 115.897, nativeEnd: 132.308 },
+        { id: "bwy-10", label: "Build 2",      nativeStart: 132.308, nativeEnd: 148.718 },
+        { id: "bwy-11", label: "Drop 2",       nativeStart: 148.718, nativeEnd: 165.128 },
+        { id: "bwy-12", label: "Drop 3",       nativeStart: 165.128, nativeEnd: 181.538 },
+        { id: "bwy-13", label: "Outro 1",      nativeStart: 181.538, nativeEnd: 197.949 },
+      ],
+      _audioState: "idle", _buffers: null, _loadPromise: null,
+    },
+    {
+      id: "dyr", name: "Do You Remember", artist: "waitwhat",
+      thumbColor: "linear-gradient(135deg, #4FD1E8, #E84BC6)", thumbIcon: "🌙",
+      isReal: true,
+      nativeBpm: 122, nativeKey: "G# maj",
+      stems: {
+        native: { vocal: "/audio/do-you-remember/native-vocal.wav", beats: "/audio/do-you-remember/native-instrumental.wav" },
+        matched: { vocal: "/audio/do-you-remember/matched-vocal.wav", beats: "/audio/do-you-remember/matched-instrumental.wav" },
+      },
+      sections: [
+        { id: "dyr-1",  label: "Intro 1",      nativeStart: 1.967,   nativeEnd: 5.902 },
+        { id: "dyr-2",  label: "Verse 1",      nativeStart: 5.902,   nativeEnd: 21.639 },
+        { id: "dyr-3",  label: "Pre-Chorus 1", nativeStart: 21.639,  nativeEnd: 37.377 },
+        { id: "dyr-4",  label: "Chorus 1",     nativeStart: 37.377,  nativeEnd: 53.115 },
+        { id: "dyr-5",  label: "Drop 1",       nativeStart: 53.115,  nativeEnd: 68.852 },
+        { id: "dyr-6",  label: "Verse 2",      nativeStart: 68.852,  nativeEnd: 84.590 },
+        { id: "dyr-7",  label: "Pre-Chorus 2", nativeStart: 84.590,  nativeEnd: 100.328 },
+        { id: "dyr-8",  label: "Chorus 2",     nativeStart: 100.328, nativeEnd: 116.066 },
+        { id: "dyr-9",  label: "Drop 2",       nativeStart: 116.066, nativeEnd: 131.803 },
+        { id: "dyr-10", label: "Drop 3",       nativeStart: 131.803, nativeEnd: 147.541 },
+        { id: "dyr-11", label: "Outro 1",      nativeStart: 147.541, nativeEnd: 151.475 },
+      ],
+      _audioState: "idle", _buffers: null, _loadPromise: null,
+    },
   ];
+
+  // A correct time-stretch preserves bar structure, so a real song's
+  // section boundaries only ever need to be measured once, against its
+  // native file -- durBars and the matched-timeline timestamps are both
+  // derived here from that single measurement plus the tempo ratio.
+  SONGS.forEach(song => {
+    if (!song.isReal) return;
+    const nativeBarSeconds = (60 / song.nativeBpm) * 4;
+    const scale = song.nativeBpm / PROJECT_BPM;
+    song.sections.forEach(sec => {
+      sec.songId = song.id;
+      sec.durBars = Math.round((sec.nativeEnd - sec.nativeStart) / nativeBarSeconds);
+      sec.matchedStart = +(sec.nativeStart * scale).toFixed(3);
+      sec.matchedEnd = +(sec.nativeEnd * scale).toFixed(3);
+    });
+  });
 
   // clip: {uid, track, label, songName, root, position(bars), duration(bars), volume}
   let clips = { vocal: [], beats: [] };
@@ -240,7 +314,7 @@
         <div class="song-sub">Tap to view sections</div>
       </div>
       <div class="song-meta">
-        <div class="meta-line">100 <span class="sep">·</span> C maj</div>
+        <div class="meta-line">${PROJECT_BPM} <span class="sep">·</span> ${PROJECT_KEY}</div>
         <div class="segments">${song.sections.length} segments</div>
       </div>
       <div class="song-check" title="Pre-matched, ready to drag">
@@ -253,6 +327,9 @@
     `;
     header.addEventListener("click", () => {
       expandedSongId = song.id;
+      if (song.isReal && song._audioState !== "ready" && song._audioState !== "loading") {
+        preloadSongAudio(song).finally(() => { if (expandedSongId === song.id) renderLibrary(); });
+      }
       renderLibrary();
     });
     return header;
@@ -264,7 +341,16 @@
   function buildExpandedSongRow(song, mode) {
     const row = document.createElement("div");
     row.className = "chip-row";
-    song.sections.forEach(sec => row.appendChild(makeChip(sec, song.name, mode, true)));
+    if (song.isReal && song._audioState !== "ready") {
+      const loading = document.createElement("div");
+      loading.className = "lib-loading";
+      loading.textContent = song._audioState === "error"
+        ? "Couldn't load audio for this song — tap back and try again."
+        : "Loading audio…";
+      row.appendChild(loading);
+    } else {
+      song.sections.forEach(sec => row.appendChild(makeChip(sec, song.name, mode, true)));
+    }
 
     const back = document.createElement("button");
     back.className = "song-back-btn";
@@ -433,6 +519,15 @@
       volume: 1,
       isSilence: !!sec.isSilence,
     };
+    // Real sections carry no synthesized pitch/pattern -- instead they point
+    // at an offset range into the song's pre-rendered "matched" stem buffer
+    // (already time/pitch-matched to the locked project BPM/key), which is
+    // what actually gets scheduled for this clip everywhere on the timeline.
+    if (sec.songId) {
+      clip.songId = sec.songId;
+      clip.sourceStart = sec.matchedStart;
+      clip.sourceEnd = sec.matchedEnd;
+    }
 
     const arr = clips[type];
     let insertIdx = arr.length; // default: append at the end
@@ -601,10 +696,25 @@
     let finalDx = 0;
     selectClip(clip.uid);
 
+    // Real clips are backed by a fixed-length buffer -- trimming past the
+    // section's original bounds is allowed (up to the full stem), but not
+    // past the buffer's actual start/end, so figure out how many bars of
+    // headroom exist on whichever side is being dragged.
+    const song = clip.songId ? SONGS.find(s => s.id === clip.songId) : null;
+    const buf = song && song._buffers ? song._buffers.matched[clip.track] : null;
+    let maxDurBars = Infinity;
+    if (buf) {
+      maxDurBars = side === "right"
+        ? Math.floor((buf.duration - clip.sourceStart) / BAR_SECONDS)
+        : Math.floor(clip.sourceEnd / BAR_SECONDS);
+      maxDurBars = Math.max(MIN_DUR_BARS, maxDurBars);
+    }
+
     function previewDuration() {
-      return side === "right"
+      const raw = side === "right"
         ? Math.max(MIN_DUR_BARS, roundStep(startDur + finalDx, 1))
         : Math.max(MIN_DUR_BARS, roundStep(startDur - finalDx, 1));
+      return Math.min(raw, maxDurBars);
     }
 
     function onMove(ev) {
@@ -625,6 +735,14 @@
 
       const type = clip.track;
       clip.duration = previewDuration();
+      // Keep whichever edge wasn't dragged anchored in source-buffer time,
+      // and derive the other edge from the new duration -- so extending a
+      // handle reveals more of the real stem on that side, and shrinking
+      // it gives that portion back, without ever touching the fixed edge.
+      if (buf) {
+        if (side === "right") clip.sourceEnd = clip.sourceStart + clip.duration * BAR_SECONDS;
+        else clip.sourceStart = clip.sourceEnd - clip.duration * BAR_SECONDS;
+      }
       // Same as the right handle: this clip's position is untouched, and
       // layout() pushes everything after it out to make room, guaranteeing
       // no overlap and no gap regardless of which handle changed the length.
@@ -813,10 +931,33 @@
     return buf;
   }
 
-  function scheduleClip(ctx, dest, clip, at, dur) {
+  function scheduleClip(ctx, dest, clip, at, dur, offsetIntoClipSec) {
     if (clip.isSilence) return; // occupies time in the sequence, produces no sound
+    if (clip.songId) { scheduleRealClip(ctx, dest, clip, at, dur, offsetIntoClipSec || 0); return; }
     if (clip.track === "vocal") scheduleVocal(ctx, dest, clip, at, dur);
     else scheduleBeats(ctx, dest, clip, at, dur);
+  }
+
+  // Plays a slice of the song's pre-rendered "matched" buffer for this
+  // clip's track. clip.sourceStart/sourceEnd are offsets (seconds) into
+  // that buffer, set when the section was dropped and adjusted by trimming;
+  // offsetIntoClipSec additionally shifts the read point when playback
+  // starts partway through the clip (e.g. the playhead was scrubbed into it).
+  function scheduleRealClip(ctx, dest, clip, at, dur, offsetIntoClipSec) {
+    const song = SONGS.find(s => s.id === clip.songId);
+    const buf = song && song._buffers ? song._buffers.matched[clip.track] : null;
+    if (!buf) return; // buffers not loaded (shouldn't happen -- clips only exist for loaded songs)
+    const srcOffset = clip.sourceStart + offsetIntoClipSec;
+    const playDur = Math.max(0, Math.min(dur, buf.duration - srcOffset));
+    if (playDur <= 0) return;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.value = clip.volume;
+    src.connect(gain).connect(dest);
+    src.start(at, srcOffset, playDur);
+    scheduledNodes.push(src);
   }
 
   function scheduleVocal(ctx, dest, clip, at, dur) {
@@ -878,6 +1019,61 @@
     }
   }
 
+  // ---------- Real-song audio loading ----------
+  // Fetches + decodes one stem file into an AudioBuffer. Decoding doesn't
+  // require the context to be running (unlock happens separately, on first
+  // touch/Play), so this can safely start before any user gesture.
+  function loadAudioBuffer(ctx, url) {
+    return fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error("Couldn't fetch " + url);
+        return res.arrayBuffer();
+      })
+      .then(ab => ctx.decodeAudioData(ab));
+  }
+
+  // Loads all four stems (native + matched, vocal + beats) for a real song,
+  // once, lazily -- kicked off the first time its row is expanded in the
+  // library, not eagerly for every song on page load. Cached on the song
+  // object itself so re-expanding it is instant.
+  function preloadSongAudio(song) {
+    if (song._loadPromise) return song._loadPromise;
+    song._audioState = "loading";
+    const ctx = getCtx();
+    song._loadPromise = Promise.all([
+      loadAudioBuffer(ctx, song.stems.native.vocal),
+      loadAudioBuffer(ctx, song.stems.native.beats),
+      loadAudioBuffer(ctx, song.stems.matched.vocal),
+      loadAudioBuffer(ctx, song.stems.matched.beats),
+    ]).then(([nativeVocal, nativeBeats, matchedVocal, matchedBeats]) => {
+      song._buffers = {
+        native: { vocal: nativeVocal, beats: nativeBeats },
+        matched: { vocal: matchedVocal, beats: matchedBeats },
+      };
+      song._audioState = "ready";
+    }).catch(err => {
+      song._audioState = "error";
+      song._loadPromise = null; // allow retry
+      showJsError("Couldn't load audio for " + song.name + ": " + err.message);
+    });
+    return song._loadPromise;
+  }
+
+  // Plays a slice of a song's native-tempo buffer directly at native pitch —
+  // used only for library previews, so a section sounds like the real song
+  // before it's matched to the project BPM/key.
+  function scheduleNativeSlice(ctx, dest, buffer, sec, at, volume) {
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const gain = ctx.createGain();
+    gain.gain.value = volume;
+    src.connect(gain).connect(dest);
+    const dur = Math.max(0, Math.min(sec.nativeEnd - sec.nativeStart, buffer.duration - sec.nativeStart));
+    if (dur <= 0) return;
+    src.start(at, sec.nativeStart, dur);
+    scheduledNodes.push(src);
+  }
+
   // ---------- Section preview (tap a chip in the Preview Area) ----------
   // A section is stem-agnostic until it's actually dropped, so previewing it
   // plays both the vocal-style and beats-style synthesis together — the best
@@ -909,11 +1105,23 @@
     const ctx = getCtx();
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    const fakeClip = { root: sec.root || 220, volume: 0.9 };
-    const durSec = barsToSeconds(sec.durBars);
     const startAt = ctx.currentTime + 0.05;
-    if (mode !== "beats") scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
-    if (mode !== "vocal") scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
+    let durSec;
+    if (sec.songId) {
+      // Real section: play the song's own native-tempo/key buffers so the
+      // preview sounds like the original, before any project matching.
+      const song = SONGS.find(s => s.id === sec.songId);
+      durSec = sec.nativeEnd - sec.nativeStart;
+      if (song && song._buffers) {
+        if (mode !== "beats") scheduleNativeSlice(ctx, ctx.destination, song._buffers.native.vocal, sec, startAt, 0.9);
+        if (mode !== "vocal") scheduleNativeSlice(ctx, ctx.destination, song._buffers.native.beats, sec, startAt, 0.9);
+      }
+    } else {
+      const fakeClip = { root: sec.root || 220, volume: 0.9 };
+      durSec = barsToSeconds(sec.durBars);
+      if (mode !== "beats") scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
+      if (mode !== "vocal") scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
+    }
 
     chipEl.classList.add("playing");
     const icon = chipEl.querySelector(".chip-play-icon");
@@ -960,7 +1168,7 @@
       const offsetIntoClipBars = Math.max(0, playheadBar - clip.position);
       const startDelaySec = Math.max(0, barsToSeconds(clip.position - playheadBar));
       const playDurSec = barsToSeconds(clip.duration - offsetIntoClipBars);
-      scheduleClip(ctx, ctx.destination, clip, playStartCtxTime + startDelaySec, playDurSec);
+      scheduleClip(ctx, ctx.destination, clip, playStartCtxTime + startDelaySec, playDurSec, barsToSeconds(offsetIntoClipBars));
     });
 
     isPlaying = true;

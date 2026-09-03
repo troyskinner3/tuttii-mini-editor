@@ -19,45 +19,59 @@ design spec and decision log.
   Songs/Vocals/Inst/Silence tab structure (tap a song to expose its
   sections in place, tab controls what previewing plays) — matching the
   production app's actual structure, not just its colors.
-- **Pass 2 (in progress):** swap the placeholder oscillator audio for real
-  stem playback. Data model decided: one vocal stem + one instrumental
-  stem per song (WAV, not MP3 — avoids MP3 encoder lead-in silence, which
-  would break bar-accurate scheduling), plus a shared per-song sections
-  list used for both lanes. Trim can pull into the full stem length on
-  either edge (not bounded to neighboring sections). BPM/Key stay
-  locked in the toolbar — the app itself still does zero live
-  time-stretching or pitch-shifting.
+- **Pass 2 (real audio wired for 2 of 3 songs):** placeholder oscillator
+  audio replaced with real stem playback for real songs, alongside the
+  original two synth demo songs (Neon Drive, Afterglow), which are
+  untouched and still fully synthesized. **Project settings are locked
+  at BPM 120, Key G# major.**
 
-  **Preview-vs-timeline audio (new decision):** each song's library
-  preview should sound like its own native BPM/key, while placing a
-  section on the timeline should sound matched to the project's locked
-  BPM/key — so users can hear the "before/after" of Tuttii's matching.
-  Achieved with **two pre-rendered exports per stem** (native + already
-  matched-to-project), not live DSP: preview plays the native buffer,
-  the timeline plays the matched buffer. Section timestamps only need
-  to be measured once, against the native file — matched-version
-  timestamps are derived from bar counts × the project's bar length,
-  since a correct time-stretch preserves bar structure. This roughly
-  doubles the stem files needed per song (native pair + matched pair)
-  but adds no real engineering risk.
+  **Dual-buffer model (implemented):** each real song ships four WAV
+  files — native vocal/instrumental (the song's own BPM/key, used for
+  library preview) and matched vocal/instrumental (pre-rendered
+  externally to the locked project BPM/key, used for anything placed
+  on the timeline). No live time-stretching or pitch-shifting happens
+  in the browser. A section's matched-timeline timestamps are derived
+  from its native timestamps × (nativeBPM / 120) — measured once,
+  against the native file only.
+  - `SONGS[].isReal`, `.nativeBpm/.nativeKey`, `.stems.native/.matched`,
+    and per-section `.nativeStart/.nativeEnd` (raw, user-supplied) plus
+    derived `.durBars/.matchedStart/.matchedEnd` — all in `src/main.js`.
+  - Lazy per-song preload (`preloadSongAudio`): fetch + `decodeAudioData`
+    for all 4 stems, kicked off the first time a song's row is expanded
+    in the library, cached on the song object. A `.lib-loading` state
+    shows while decoding; sections aren't interactive until ready.
+  - Library preview (tap a chip) plays a native-buffer slice at the
+    song's real BPM/key. Dropping a section on the timeline tags the
+    clip with `songId` + a `sourceStart/sourceEnd` offset into the
+    matched buffer; `scheduleRealClip()` plays that slice via
+    `AudioBufferSourceNode.start(at, offset, duration)`. Trimming a real
+    clip's handles adjusts `sourceStart`/`sourceEnd` (anchoring the
+    untouched edge), clamped to the matched buffer's actual length —
+    so a trim can reveal more of the real stem on either side, same as
+    the design called for. Playback resuming mid-clip (after a scrub)
+    passes the correct offset into the buffer.
+  - WAV export renders real clips into the offline mix same as before —
+    `scheduleClip` transparently branches on `clip.songId`.
 
-  **Song 1 — "Be With You" (Duke Dylan):**
-  - Native: BPM 117, **Key: A major** (confirmed).
-  - Section timestamps: received and verified against the native file
-    (all sections divide into clean 4- or 8-bar lengths at 117 BPM).
-  - **Project BPM likely 120** (not finalized). **Project key: TBD**,
-    depends on songs 2 & 3.
-  - **Audio files: not yet received** (now need native + matched pairs
-    per the decision above). Hand-off is via Google Drive (GitHub's
-    browser uploader caps at 25MB; stems run ~36.7MB each).
-  - Not yet built: the `src/data/songs/*.json` schema (now needs native
-    + matched stem paths per song), `src/audio/engine.js` (preload +
-    real `AudioBufferSourceNode` playback, dual-buffer aware), or the
-    swap in `scheduleVocal()`/`scheduleBeats()`. Waiting on the audio
-    files before starting, since it needs real files to test against.
+  **Song 1 — "Be With You" (Duke Dylan):** BPM 117, Key A major.
+  13 sections. Audio in `public/audio/be-with-you/`. Working end-to-end
+  (preview, drop, trim, playback, export) — verified with Playwright.
 
-  **Songs 2 & 3:** not yet sent (user is preparing them alongside song 1;
-  project key depends on what they turn out to be).
+  **Song 2 — "Do You Remember" (waitwhat):** BPM 122, Key G# major.
+  11 sections. Audio in `public/audio/do-you-remember/`. Working
+  end-to-end — verified with Playwright.
+
+  **Song 3:** not yet sent.
+
+  **Known open item:** the audio files (~390MB total across both songs)
+  are committed straight into `public/audio/` and tracked in git — no
+  external hosting, matching the "smaller stack" Webflow-embed plan.
+  This does make the repo noticeably heavier to clone; worth keeping in
+  mind if a third song of similar size gets added. Also: the Artifact
+  preview link (used for quick visual iteration in chat) serves from a
+  different origin than this repo, so the root-relative `/audio/...`
+  paths won't resolve there — that preview channel needs `npm run dev`
+  / a real deploy to actually hear audio, not the Artifact link.
 
 - **Pass 3 (optional):** split `src/main.js` into smaller modules.
 
