@@ -149,7 +149,7 @@
   let scheduledNodes = [];
   let rafId = null;
   let lastScheduleInfo = "none"; // temporary diagnostic, see updateDebugReadout
-  let masterOutCache = null; // { ctx, node, el } -- see getMasterOut() below
+  let masterOutCache = null; // { ctx, el } -- see ensureSilentLoop() below
 
   let history = [];
   let historyIndex = -1;
@@ -896,23 +896,29 @@
   // real device: context running, a node genuinely scheduled, decoded
   // buffers carrying real (non-silent) samples, yet total silence. Real
   // <audio>/<video> playback is categorized differently and isn't subject
-  // to that. So: route the whole graph's output through a real <audio>
-  // element via a MediaStreamAudioDestinationNode instead of straight to
-  // ctx.destination. Cached (declared up with the other audio state) per
-  // context instance, recreated alongside it, e.g. after the
-  // background/return context-replacement above.
-  function getMasterOut(ctx) {
-    if (masterOutCache && masterOutCache.ctx === ctx) return masterOutCache.node;
-    const node = ctx.createMediaStreamDestination();
-    const el = (masterOutCache && masterOutCache.el) || document.createElement("audio");
-    el.autoplay = true;
+  // to that. First attempt routed the whole graph through a
+  // MediaStreamAudioDestinationNode into an <audio> element -- got real
+  // sound, but consistently glitchy/stuttering, a known WebKit instability
+  // with that combination. Switched to a lower-risk pattern instead: leave
+  // the main graph on ctx.destination entirely untouched, and separately
+  // loop a tiny silent WAV through a real <audio src> element purely to
+  // claim the page's audio session as "playback" -- iOS applies that
+  // category page-wide, not per-source, so the main graph benefits without
+  // ever touching its signal path.
+  function ensureSilentLoop(ctx) {
+    // Independent of any AudioContext once created (it's just a plain
+    // element looping a WAV blob) -- doesn't need recreating alongside a
+    // context swap the way the main graph does.
+    if (masterOutCache) { masterOutCache.el.play().catch(() => {}); return; }
+    const el = document.createElement("audio");
+    const silentBuf = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * 0.5)), ctx.sampleRate);
+    el.src = URL.createObjectURL(audioBufferToWav(silentBuf));
+    el.loop = true;
     el.playsInline = true;
     el.style.display = "none";
-    if (!el.isConnected) document.body.appendChild(el);
-    el.srcObject = node.stream;
+    document.body.appendChild(el);
     el.play().catch(() => {});
-    masterOutCache = { ctx, node, el };
-    return node;
+    masterOutCache = { el };
   }
   function audioElInfo() {
     const el = masterOutCache && masterOutCache.el;
@@ -931,8 +937,9 @@
       const buf = ctx.createBuffer(1, 1, 22050);
       const src = ctx.createBufferSource();
       src.buffer = buf;
-      src.connect(getMasterOut(ctx));
+      src.connect(ctx.destination);
       src.start(0);
+      ensureSilentLoop(ctx);
     } catch (err) {
       return;
     }
@@ -1220,7 +1227,7 @@
         .then(buffers => {
           if (previewChipEl !== chipEl) return; // stopped or replaced before this resolved
           const startAt = ctx.currentTime + 0.05;
-          buffers.forEach(buf => schedulePreviewBuffer(ctx, getMasterOut(ctx), buf, startAt, 0.9));
+          buffers.forEach(buf => schedulePreviewBuffer(ctx, ctx.destination, buf, startAt, 0.9));
           if (icon) icon.textContent = "⏸";
           const durSec = buffers[0].duration;
           previewTimeoutId = setTimeout(() => { if (previewChipEl === chipEl) stopPreview(); }, durSec * 1000 + 80);
@@ -1235,8 +1242,8 @@
     const fakeClip = { root: sec.root || 220, volume: 0.9 };
     const durSec = barsToSeconds(sec.durBars);
     const startAt = ctx.currentTime + 0.05;
-    if (mode !== "beats") scheduleVocal(ctx, getMasterOut(ctx), fakeClip, startAt, durSec);
-    if (mode !== "vocal") scheduleBeats(ctx, getMasterOut(ctx), fakeClip, startAt, durSec);
+    if (mode !== "beats") scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
+    if (mode !== "vocal") scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
     if (icon) icon.textContent = "⏸";
     previewTimeoutId = setTimeout(() => {
       if (previewChipEl === chipEl) stopPreview();
@@ -1286,7 +1293,7 @@
       const offsetIntoClipBars = Math.max(0, playheadBar - clip.position);
       const startDelaySec = Math.max(0, barsToSeconds(clip.position - playheadBar));
       const playDurSec = barsToSeconds(clip.duration - offsetIntoClipBars);
-      scheduleClip(ctx, getMasterOut(ctx), clip, playStartCtxTime + startDelaySec, playDurSec, barsToSeconds(offsetIntoClipBars));
+      scheduleClip(ctx, ctx.destination, clip, playStartCtxTime + startDelaySec, playDurSec, barsToSeconds(offsetIntoClipBars));
     });
 
     isPlaying = true;
