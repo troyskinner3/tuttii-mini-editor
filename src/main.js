@@ -9,7 +9,10 @@
   const PROJECT_BPM = 120;
   const PROJECT_KEY = "G# maj";
   const BAR_SECONDS = (60 / PROJECT_BPM) * 4; // 4/4 time -> 2s per bar
-  const BAR_PX = 28;
+  const BASE_BAR_PX = 28;
+  let BAR_PX = BASE_BAR_PX; // mutable: pinch-to-zoom (mobile only) rescales this
+  const MIN_BAR_PX = BASE_BAR_PX * 0.5;
+  const MAX_BAR_PX = BASE_BAR_PX * 2;
   const TOTAL_BARS = 32;
   const MIN_DUR_BARS = 1;
 
@@ -194,9 +197,6 @@
   window.addEventListener("unhandledrejection", (e) => showJsError(String(e.reason)));
 
   const LABEL_W = 66;
-  const contentWidth = barsToPx(TOTAL_BARS);
-  scrollInner.style.width = (LABEL_W + contentWidth) + "px";
-  [vocalLane, beatsLane, scrubLane].forEach(el => { el.style.width = contentWidth + "px"; });
 
   // Scrolls the timeline just enough to bring a clip fully into view, if it
   // isn't already — used after a drop or duplicate so a new clip landing
@@ -214,21 +214,106 @@
   }
 
   // ---------- Build bar grid + ruler ----------
-  for (let b = 0; b < TOTAL_BARS; b++) {
-    [vocalLane, beatsLane].forEach(lane => {
-      const gl = document.createElement("div");
-      gl.className = "bar-line" + (b % 4 === 0 ? " major" : "");
-      gl.style.left = barsToPx(b) + "px";
-      lane.appendChild(gl);
-    });
-    if (b % 4 === 0) {
-      const tick = document.createElement("div");
-      tick.className = "scrub-tick";
-      tick.style.left = barsToPx(b) + "px";
-      tick.textContent = (b + 1);
-      scrubLane.appendChild(tick);
+  // Lane/scrub widths and every grid line's position are all derived from
+  // BAR_PX, so this whole thing is torn down and rebuilt on zoom (pinch),
+  // not just built once -- these are static inline styles computed at
+  // build time, not recalculated per-render like clips/playhead are.
+  function buildTimelineGrid() {
+    vocalLane.querySelectorAll(".bar-line").forEach(el => el.remove());
+    beatsLane.querySelectorAll(".bar-line").forEach(el => el.remove());
+    scrubLane.querySelectorAll(".scrub-tick").forEach(el => el.remove());
+
+    const contentWidth = barsToPx(TOTAL_BARS);
+    scrollInner.style.width = (LABEL_W + contentWidth) + "px";
+    [vocalLane, beatsLane, scrubLane].forEach(el => { el.style.width = contentWidth + "px"; });
+
+    for (let b = 0; b < TOTAL_BARS; b++) {
+      [vocalLane, beatsLane].forEach(lane => {
+        const gl = document.createElement("div");
+        gl.className = "bar-line" + (b % 4 === 0 ? " major" : "");
+        gl.style.left = barsToPx(b) + "px";
+        lane.appendChild(gl);
+      });
+      if (b % 4 === 0) {
+        const tick = document.createElement("div");
+        tick.className = "scrub-tick";
+        tick.style.left = barsToPx(b) + "px";
+        tick.textContent = (b + 1);
+        scrubLane.appendChild(tick);
+      }
     }
   }
+  buildTimelineGrid();
+
+  // ---------- Pinch-to-zoom (mobile timeline only) ----------
+  // Mouse/pen pointers never enter this at all (gated on pointerType
+  // "touch" below), so desktop is completely unaffected. Scoped to
+  // scrollArea's own subtree, which is also how it naturally never
+  // interferes with the library's chip-row dragging elsewhere on the page.
+  //
+  // The trickier part isn't the zoom math, it's that a pinch's first finger
+  // can easily land on a clip, a trim handle, or the scrub row and already
+  // be mid-gesture (move/trim/seek) by the time the second finger arrives.
+  // Each of those three gesture-starters registers a cancelActiveGesture
+  // callback for exactly this handoff -- when the second touch lands, it's
+  // called once (detaching that gesture's listeners without committing
+  // anything) before pinch tracking takes over.
+  let cancelActiveGesture = null;
+  const touchPositions = new Map(); // pointerId -> {x, y}, touch pointers only
+  let pinchState = null; // { startDist, startBarPx, screenOffset }
+
+  function touchDist() {
+    const pts = [...touchPositions.values()];
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+
+  function setZoom(newBarPx, anchorClientX) {
+    newBarPx = Math.max(MIN_BAR_PX, Math.min(MAX_BAR_PX, newBarPx));
+    if (Math.abs(newBarPx - BAR_PX) < 0.01) return;
+    const rect = scrollArea.getBoundingClientRect();
+    const screenOffset = anchorClientX - rect.left; // pinch midpoint's position on screen, stable across zoom
+    const anchorBars = (scrollArea.scrollLeft + screenOffset - LABEL_W) / BAR_PX; // which bar sits there right now
+    BAR_PX = newBarPx;
+    buildTimelineGrid();
+    renderClips();
+    updatePlayheadEl();
+    // Keep that same bar under the same screen point, so zooming feels
+    // anchored to where the fingers actually are, not the left edge.
+    scrollArea.scrollLeft = Math.max(0, LABEL_W + anchorBars * BAR_PX - screenOffset);
+  }
+
+  scrollArea.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    touchPositions.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPositions.size === 2) {
+      e.stopPropagation(); // don't also let this 2nd touch start its own clip/handle/scrub gesture
+      if (cancelActiveGesture) cancelActiveGesture();
+      const pts = [...touchPositions.values()];
+      pinchState = {
+        startDist: touchDist(),
+        startBarPx: BAR_PX,
+        anchorClientX: (pts[0].x + pts[1].x) / 2,
+      };
+    }
+  }, { capture: true });
+
+  scrollArea.addEventListener("pointermove", (e) => {
+    if (!touchPositions.has(e.pointerId)) return;
+    touchPositions.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!pinchState || touchPositions.size !== 2) return;
+    e.stopPropagation();
+    const dist = touchDist();
+    if (dist <= 0 || pinchState.startDist <= 0) return;
+    setZoom(pinchState.startBarPx * (dist / pinchState.startDist), pinchState.anchorClientX);
+  }, { capture: true });
+
+  function endTouch(e) {
+    if (!touchPositions.has(e.pointerId)) return;
+    touchPositions.delete(e.pointerId);
+    if (touchPositions.size < 2) pinchState = null;
+  }
+  scrollArea.addEventListener("pointerup", endTouch, { capture: true });
+  scrollArea.addEventListener("pointercancel", endTouch, { capture: true });
 
   // The whole row is the scrub target — no need to hit the thin playhead line
   // exactly. Press anywhere in it and the playhead snaps to your finger, then
@@ -252,16 +337,21 @@
       ev.preventDefault();
       seekFromEvent(ev);
     }
-    function onUp(ev) {
-      if (ev.pointerId !== pointerId) return;
+    function cleanup() {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onUp);
       document.body.style.touchAction = "";
+      cancelActiveGesture = null;
+    }
+    function onUp(ev) {
+      if (ev.pointerId !== pointerId) return;
+      cleanup();
     }
     document.addEventListener("pointermove", onMove, { passive: false });
     document.addEventListener("pointerup", onUp);
     document.addEventListener("pointercancel", onUp);
+    cancelActiveGesture = cleanup;
   });
 
   // ---------- Library (tabbed: Songs / Vocals / Inst / Silence) ----------
@@ -690,11 +780,15 @@
         scrollArea.scrollLeft = startScrollLeft - dxPx;
       }
     }
-    function onUp() {
+    function cleanup() {
       clearTimeout(holdTimer);
-      el.releasePointerCapture(e.pointerId);
+      try { el.releasePointerCapture(e.pointerId); } catch (err) {}
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
+      cancelActiveGesture = null;
+    }
+    function onUp() {
+      cleanup();
       // Released before the hold delay and without moving past the
       // threshold either -- a plain, quick tap.
       if (!decided) { openInspector(clip.uid); return; }
@@ -708,6 +802,11 @@
     }
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
+    // A pinch's second finger can land while this is mid-drag -- hand off
+    // cleanly by detaching without committing a reorder, and discard any
+    // in-progress visual offset (see onMove's el.style.left) by re-rendering
+    // from the real, untouched clip data.
+    cancelActiveGesture = () => { cleanup(); renderClips(); };
   }
 
   // Figures out where a dragged clip's center point falls among its siblings
@@ -784,10 +883,14 @@
       // notches into place as you drag rather than only on release.
       el.style.width = barsToPx(previewDuration()) + "px";
     }
-    function onUp() {
-      el.releasePointerCapture(e.pointerId);
+    function cleanup() {
+      try { el.releasePointerCapture(e.pointerId); } catch (err) {}
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
+      cancelActiveGesture = null;
+    }
+    function onUp() {
+      cleanup();
 
       const type = clip.track;
       clip.duration = previewDuration();
@@ -810,6 +913,10 @@
     }
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
+    // Same pinch handoff as startClipMove: detach without committing a
+    // trim, and discard the in-progress visual width change (onMove's
+    // el.style.width) by re-rendering from the real, untouched clip data.
+    cancelActiveGesture = () => { cleanup(); renderClips(); };
   }
 
   // ---------- Selection / inspector ----------

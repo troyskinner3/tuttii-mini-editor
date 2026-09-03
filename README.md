@@ -168,6 +168,27 @@ design spec and decision log.
   since `touch-action: none` (needed for the reorder drag itself) means
   native scrolling was never going to kick in regardless.
 
+  **Pinch-to-zoom on the mobile timeline.** Two-finger pinch inside
+  `#scrollArea` rescales `BAR_PX` (pixels per bar) between 0.5x and 2x of
+  its base value, so clips shrink/grow accordingly; desktop is untouched —
+  the whole feature is gated on `e.pointerType === "touch"`. `BAR_PX` went
+  from a `const` to a `let`; zooming tears down and rebuilds the bar grid
+  (`buildTimelineGrid()`) and re-renders clips/playhead against the new
+  scale, then adjusts `scrollLeft` to keep the pinch midpoint anchored to
+  the same bar on screen rather than snapping to the left edge. The one
+  real complication: a pinch's first finger can already be mid-gesture
+  (dragging a clip, trimming a handle, scrubbing) by the time the second
+  finger lands. Each of those three gesture-starters now registers a
+  `cancelActiveGesture` callback that a second touchdown calls once —
+  detaching the in-progress gesture's listeners and re-rendering from the
+  untouched clip data, without committing whatever move/trim/seek was
+  underway — before pinch tracking takes over. Verified with real
+  multi-touch simulation (CDP `Input.dispatchTouchEvent`, since Playwright's
+  regular mouse/touchscreen APIs can't drive two independent touch points):
+  pinch-out clamps to 2x, pinch-in clamps to 0.5x, and every other timeline
+  gesture (tap-to-inspect, drag-to-reorder, trim, scrub) still works
+  correctly after zooming.
+
 - **Pass 3 (optional):** split `src/main.js` into smaller modules.
 
 ## Develop
