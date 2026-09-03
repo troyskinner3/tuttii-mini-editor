@@ -638,33 +638,72 @@
     return el;
   }
 
+  // Reordering and scrolling are both horizontal gestures on a clip, so
+  // there's no axis to tell them apart the way the library's drag-out (a
+  // vertical lift) can. Instead: a brief hold without moving "commits" to a
+  // reorder; moving before that commits treats the gesture as a scroll
+  // instead. touch-action:none on .clip (needed so the reorder drag itself
+  // isn't fought by the browser) means native scrolling never gets a
+  // chance here regardless, so the scroll case replicates it by hand --
+  // same approach the library's chip-row drag already uses for the same reason.
+  const CLIP_MOVE_HOLD_MS = 160;
+  const CLIP_MOVE_THRESHOLD_PX = 6;
+
   function startClipMove(e, clip, el) {
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     const startX = e.clientX;
     const startCenterBars = clip.position + clip.duration / 2;
+    const startScrollLeft = scrollArea.scrollLeft;
     let moved = false;
     let liveDx = 0;
+    // Undecided until either the hold delay elapses (-> reorder) or the
+    // finger moves past the threshold first (-> scroll).
+    let decided = false;
+    let isReorder = false;
     selectClip(clip.uid);
 
+    const holdTimer = setTimeout(() => {
+      if (!decided) { decided = true; isReorder = true; }
+    }, CLIP_MOVE_HOLD_MS);
+
     function onMove(ev) {
-      const dx = pxToBars(ev.clientX - startX);
-      if (Math.abs(dx) > 0.05) moved = true;
-      liveDx = dx;
-      // Free visual drag only — the real array order (and therefore every
-      // clip's actual position) is untouched until release, so nothing here
-      // can produce a gap or overlap mid-gesture.
-      el.style.left = barsToPx(clip.position + dx) + "px";
+      const dxPx = ev.clientX - startX;
+      if (!decided) {
+        if (Math.abs(dxPx) > CLIP_MOVE_THRESHOLD_PX) {
+          decided = true;
+          isReorder = false;
+          clearTimeout(holdTimer);
+        } else {
+          return; // still within the hold window, waiting to see which this is
+        }
+      }
+      if (isReorder) {
+        const dx = pxToBars(dxPx);
+        if (Math.abs(dx) > 0.05) moved = true;
+        liveDx = dx;
+        // Free visual drag only — the real array order (and therefore every
+        // clip's actual position) is untouched until release, so nothing here
+        // can produce a gap or overlap mid-gesture.
+        el.style.left = barsToPx(clip.position + dx) + "px";
+      } else {
+        scrollArea.scrollLeft = startScrollLeft - dxPx;
+      }
     }
     function onUp() {
+      clearTimeout(holdTimer);
       el.releasePointerCapture(e.pointerId);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
+      // Released before the hold delay and without moving past the
+      // threshold either -- a plain, quick tap.
+      if (!decided) { openInspector(clip.uid); return; }
+      if (!isReorder) return; // was a scroll gesture, nothing left to do
       if (moved) {
         reorderClip(clip, startCenterBars + liveDx);
         commitHistory();
       } else {
-        openInspector(clip.uid); // plain tap on an existing clip -> inspect it
+        openInspector(clip.uid); // held past the delay but never actually moved -> still a tap
       }
     }
     el.addEventListener("pointermove", onMove);
