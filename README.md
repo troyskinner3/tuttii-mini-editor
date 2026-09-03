@@ -158,6 +158,16 @@ design spec and decision log.
   those load lazily per-tap and prefetching every section's audio just for
   thumbnails would undo the near-instant preview fix above.
 
+  **Scroll vs. reorder on filled lanes.** Once clips fill a lane, a swipe
+  meant to scroll the timeline was getting caught as a clip-reorder drag —
+  both are horizontal gestures on `.clip`, with no axis to tell them apart
+  (unlike the library's chip-row drag-out, which uses a vertical lift for
+  exactly this reason). Fixed with a brief hold (160ms) that "commits" a
+  press to a reorder; moving more than a few px before that elapses commits
+  it to a scroll instead, replicated by hand via `scrollArea.scrollLeft`
+  since `touch-action: none` (needed for the reorder drag itself) means
+  native scrolling was never going to kick in regardless.
+
 - **Pass 3 (optional):** split `src/main.js` into smaller modules.
 
 ## Develop
