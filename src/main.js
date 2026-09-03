@@ -13,11 +13,12 @@
   const TOTAL_BARS = 32;
   const MIN_DUR_BARS = 1;
 
-  // Resolves a stem path against wherever this build is actually being
-  // served from (Vite's BASE_URL) rather than assuming the site's domain
-  // root -- so the same build works unmodified from the local dev server,
-  // a GitHub Pages project subpath, or a future production root domain.
-  function audioUrl(path) { return import.meta.env.BASE_URL + path; }
+  // Stem paths below are plain relative paths (no leading slash) on purpose:
+  // fetch() resolves them against the page's own URL, so the same files
+  // load correctly whether this is served from a domain root, a GitHub
+  // Pages project subpath, or opened straight from the repo -- no build
+  // step or base-path config required.
+  function audioUrl(path) { return path; }
 
   function barsToSeconds(b) { return b * BAR_SECONDS; }
   function barsToPx(b) { return b * BAR_PX; }
