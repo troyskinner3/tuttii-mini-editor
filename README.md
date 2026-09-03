@@ -149,6 +149,15 @@ design spec and decision log.
   it can't reach `/audio/...` at all — that channel is visual-only,
   not for hearing audio.
 
+  **Real waveforms on placed clips.** `computeWaveformBars()` samples real
+  per-bin peak amplitude from a clip's actual range of its song's matched
+  buffer, so a quiet or silent stretch in a vocal genuinely shows as
+  low/flat bars — not the old decorative sine pattern (still used as a
+  brief placeholder before a freshly-dropped clip's matched audio finishes
+  loading). Scoped to the timeline only, not library preview chips, since
+  those load lazily per-tap and prefetching every section's audio just for
+  thumbnails would undo the near-instant preview fix above.
+
 - **Pass 3 (optional):** split `src/main.js` into smaller modules.
 
 ## Develop
