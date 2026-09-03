@@ -518,10 +518,12 @@
       // kicked off here rather than awaited, so the drop itself stays snappy;
       // scheduleRealClip() simply produces no sound for this clip until it
       // resolves (a moment, in practice, given the file sizes involved).
+      // preloadMatched() is idempotent (returns the cached promise once
+      // loading/loaded), so this is safe to call regardless of who actually
+      // triggered the fetch -- re-rendering once it resolves is what swaps
+      // this clip's waveform from the decorative placeholder to real data.
       const song = SONGS.find(s => s.id === sec.songId);
-      if (song && song._matched.state !== "ready" && song._matched.state !== "loading") {
-        preloadMatched(song).catch(() => {});
-      }
+      if (song) preloadMatched(song).then(() => renderClips()).catch(() => {});
     }
 
     const arr = clips[type];
@@ -542,6 +544,31 @@
     selectClip(clip.uid);
     scrollClipIntoView(clip);
     commitHistory();
+  }
+
+  // Real per-bar peak amplitude (0-1) for a buffer's [startSec, endSec)
+  // window, one bar per roughly-pixel-width slot -- actual audio, so a
+  // silent stretch of a vocal genuinely shows as a flat/low run of bars
+  // instead of the decorative sine pattern used as a loading placeholder.
+  function computeWaveformBars(buffer, startSec, endSec, barCount) {
+    const sr = buffer.sampleRate;
+    const ch = buffer.getChannelData(0);
+    const startSample = Math.max(0, Math.floor(startSec * sr));
+    const endSample = Math.min(ch.length, Math.floor(endSec * sr));
+    const span = Math.max(1, endSample - startSample);
+    const bars = [];
+    for (let b = 0; b < barCount; b++) {
+      const binStart = startSample + Math.floor((span * b) / barCount);
+      const binEnd = Math.max(binStart + 1, startSample + Math.floor((span * (b + 1)) / barCount));
+      const step = Math.max(1, Math.floor((binEnd - binStart) / 20)); // sparse sample within the bin
+      let peak = 0;
+      for (let i = binStart; i < binEnd; i += step) {
+        const v = Math.abs(ch[i]);
+        if (v > peak) peak = v;
+      }
+      bars.push(peak);
+    }
+    return bars;
   }
 
   // ---------- Render clips ----------
@@ -574,9 +601,22 @@
       const widthPx = barsToPx(clip.duration);
       const barsCount = Math.max(5, Math.round(widthPx / 7));
       let waveHtml = '<div class="clip-wave">';
-      for (let i = 0; i < barsCount; i++) {
-        const h = 4 + Math.round(Math.abs(Math.sin(i * 1.7 + clip.uid)) * 20);
-        waveHtml += `<span style="height:${h}px"></span>`;
+      const song = clip.songId ? SONGS.find(s => s.id === clip.songId) : null;
+      const buf = song && song._matched.buffers ? song._matched.buffers[clip.track] : null;
+      if (buf) {
+        const endSec = Math.min(buf.duration, clip.sourceStart + clip.duration * BAR_SECONDS);
+        computeWaveformBars(buf, clip.sourceStart, endSec, barsCount).forEach(peak => {
+          const h = 4 + Math.round(peak * 20);
+          waveHtml += `<span style="height:${h}px"></span>`;
+        });
+      } else {
+        // Matched audio hasn't finished loading yet -- decorative placeholder,
+        // replaced with the real waveform on the renderClips() that follows
+        // preloadMatched() resolving (see dropSectionAt).
+        for (let i = 0; i < barsCount; i++) {
+          const h = 4 + Math.round(Math.abs(Math.sin(i * 1.7 + clip.uid)) * 20);
+          waveHtml += `<span style="height:${h}px"></span>`;
+        }
       }
       waveHtml += "</div>";
       bodyHtml = `<div class="clip-name">${clip.label}</div><div class="clip-sub">${clip.songName}</div>${waveHtml}`;
