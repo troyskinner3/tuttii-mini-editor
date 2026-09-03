@@ -322,7 +322,10 @@
   .handle {
     position: absolute;
     top: 0; bottom: 0;
-    width: 9px;
+    /* Hit zone is deliberately much wider than the visible line (below) --
+       9px was too small a thumb target and easily missed in favor of the
+       clip's own move gesture underneath it. */
+    width: 22px;
     cursor: ew-resize;
     touch-action: none;
     user-select: none;
