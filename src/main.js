@@ -57,10 +57,9 @@
     {
       id: "bwy", name: "Be With You", artist: "Duke Dylan",
       thumbColor: "linear-gradient(135deg, #FDBB2D, #FF6B6B)", thumbIcon: "🎧",
-      isReal: true,
+      isReal: true, folder: "be-with-you",
       nativeBpm: 117, nativeKey: "A maj",
       stems: {
-        native: { vocal: audioUrl("audio/be-with-you/native-vocal.mp3"), beats: audioUrl("audio/be-with-you/native-instrumental.mp3") },
         matched: { vocal: audioUrl("audio/be-with-you/matched-vocal.mp3"), beats: audioUrl("audio/be-with-you/matched-instrumental.mp3") },
       },
       sections: [
@@ -78,15 +77,20 @@
         { id: "bwy-12", label: "Drop 3",       nativeStart: 165.128, nativeEnd: 181.538 },
         { id: "bwy-13", label: "Outro 1",      nativeStart: 181.538, nativeEnd: 197.949 },
       ],
-      _audioState: "idle", _buffers: null, _loadPromise: null,
+      // Native (preview) and matched (timeline) stem pairs load independently --
+      // native is small and prefetched in the background from page load, so
+      // Preview no longer touches these -- each section has its own tiny
+      // pre-sliced preview file (see SECTION_PREVIEW below), so nothing
+      // whole-song needs to load before a section can be tapped. Matched
+      // still loads as one pair, lazily, on first actual drop.
+      _matched: { state: "idle", buffers: null, promise: null },
     },
     {
       id: "dyr", name: "Do You Remember", artist: "waitwhat",
       thumbColor: "linear-gradient(135deg, #4FD1E8, #E84BC6)", thumbIcon: "🌙",
-      isReal: true,
+      isReal: true, folder: "do-you-remember",
       nativeBpm: 122, nativeKey: "G# maj",
       stems: {
-        native: { vocal: audioUrl("audio/do-you-remember/native-vocal.mp3"), beats: audioUrl("audio/do-you-remember/native-instrumental.mp3") },
         matched: { vocal: audioUrl("audio/do-you-remember/matched-vocal.mp3"), beats: audioUrl("audio/do-you-remember/matched-instrumental.mp3") },
       },
       sections: [
@@ -102,7 +106,7 @@
         { id: "dyr-10", label: "Drop 3",       nativeStart: 131.803, nativeEnd: 147.541 },
         { id: "dyr-11", label: "Outro 1",      nativeStart: 147.541, nativeEnd: 151.475 },
       ],
-      _audioState: "idle", _buffers: null, _loadPromise: null,
+      _matched: { state: "idle", buffers: null, promise: null },
     },
   ];
 
@@ -318,9 +322,6 @@
     `;
     header.addEventListener("click", () => {
       expandedSongId = song.id;
-      if (song.isReal && song._audioState !== "ready" && song._audioState !== "loading") {
-        preloadSongAudio(song).finally(() => { if (expandedSongId === song.id) renderLibrary(); });
-      }
       renderLibrary();
     });
     return header;
@@ -329,19 +330,12 @@
   // Replaces the song's summary row in place with its sections -- not an
   // accordion insert below it. Only one song is ever expanded at a time;
   // the back button (or expanding a different song) collapses it again.
+  // Sections render immediately -- nothing whole-song has to load first,
+  // since each chip loads its own tiny preview file lazily on first tap.
   function buildExpandedSongRow(song, mode) {
     const row = document.createElement("div");
     row.className = "chip-row";
-    if (song.isReal && song._audioState !== "ready") {
-      const loading = document.createElement("div");
-      loading.className = "lib-loading";
-      loading.textContent = song._audioState === "error"
-        ? "Couldn't load audio for this song — tap back and try again."
-        : "Loading audio…";
-      row.appendChild(loading);
-    } else {
-      song.sections.forEach(sec => row.appendChild(makeChip(sec, song.name, mode, true)));
-    }
+    song.sections.forEach(sec => row.appendChild(makeChip(sec, song.name, mode, true)));
 
     const back = document.createElement("button");
     back.className = "song-back-btn";
@@ -518,6 +512,15 @@
       clip.songId = sec.songId;
       clip.sourceStart = sec.matchedStart;
       clip.sourceEnd = sec.matchedEnd;
+      // Matched audio is only ever needed once something's actually placed
+      // on the timeline, so it's not fetched until right now, on first use --
+      // kicked off here rather than awaited, so the drop itself stays snappy;
+      // scheduleRealClip() simply produces no sound for this clip until it
+      // resolves (a moment, in practice, given the file sizes involved).
+      const song = SONGS.find(s => s.id === sec.songId);
+      if (song && song._matched.state !== "ready" && song._matched.state !== "loading") {
+        preloadMatched(song).catch(() => {});
+      }
     }
 
     const arr = clips[type];
@@ -674,7 +677,7 @@
     // past the buffer's actual start/end, so figure out how many bars of
     // headroom exist on whichever side is being dragged.
     const song = clip.songId ? SONGS.find(s => s.id === clip.songId) : null;
-    const buf = song && song._buffers ? song._buffers.matched[clip.track] : null;
+    const buf = song && song._matched.buffers ? song._matched.buffers[clip.track] : null;
     let maxDurBars = Infinity;
     if (buf) {
       maxDurBars = side === "right"
@@ -810,7 +813,14 @@
 
   // ---------- Undo / redo ----------
   function snapshot() { return JSON.parse(JSON.stringify(clips)); }
+  // Every mutating action (drop, move, trim, duplicate, delete, volume
+  // change) commits here, and undo/redo both land here too -- pausing
+  // uniformly at this one point means playback never keeps running against
+  // a snapshot of the timeline that no longer matches what's on screen.
+  // Live-updating in-progress playback to match instead was the other
+  // option; pausing is far simpler and avoids that whole class of bug.
   function commitHistory() {
+    pause();
     history = history.slice(0, historyIndex + 1);
     history.push(snapshot());
     historyIndex++;
@@ -818,6 +828,7 @@
   }
   function undo() {
     if (historyIndex <= 0) return;
+    pause();
     historyIndex--;
     clips = JSON.parse(JSON.stringify(history[historyIndex]));
     renderClips();
@@ -825,6 +836,7 @@
   }
   function redo() {
     if (historyIndex >= history.length - 1) return;
+    pause();
     historyIndex++;
     clips = JSON.parse(JSON.stringify(history[historyIndex]));
     renderClips();
@@ -911,8 +923,8 @@
   // starts partway through the clip (e.g. the playhead was scrubbed into it).
   function scheduleRealClip(ctx, dest, clip, at, dur, offsetIntoClipSec) {
     const song = SONGS.find(s => s.id === clip.songId);
-    const buf = song && song._buffers ? song._buffers.matched[clip.track] : null;
-    if (!buf) return; // buffers not loaded (shouldn't happen -- clips only exist for loaded songs)
+    const buf = song && song._matched.buffers ? song._matched.buffers[clip.track] : null;
+    if (!buf) return; // matched audio hasn't finished loading yet -- silent until it does
     const srcOffset = clip.sourceStart + offsetIntoClipSec;
     const playDur = Math.max(0, Math.min(dur, buf.duration - srcOffset));
     if (playDur <= 0) return;
@@ -998,45 +1010,57 @@
       .then(ab => ctx.decodeAudioData(ab));
   }
 
-  // Loads all four stems (native + matched, vocal + beats) for a real song,
-  // once, lazily -- kicked off the first time its row is expanded in the
-  // library, not eagerly for every song on page load. Cached on the song
-  // object itself so re-expanding it is instant.
-  function preloadSongAudio(song) {
-    if (song._loadPromise) return song._loadPromise;
-    song._audioState = "loading";
+  // The matched stem pair is only ever needed once something is actually
+  // dropped onto the timeline, so it's fetched lazily right at that moment
+  // rather than paying for it up front. Cached on the song object once
+  // loaded, so re-use (a second drop, a re-render) is instant.
+  function preloadMatched(song) {
+    const slot = song._matched;
+    if (slot.promise) return slot.promise;
+    slot.state = "loading";
     const ctx = getCtx();
-    song._loadPromise = Promise.all([
-      loadAudioBuffer(ctx, song.stems.native.vocal),
-      loadAudioBuffer(ctx, song.stems.native.beats),
+    slot.promise = Promise.all([
       loadAudioBuffer(ctx, song.stems.matched.vocal),
       loadAudioBuffer(ctx, song.stems.matched.beats),
-    ]).then(([nativeVocal, nativeBeats, matchedVocal, matchedBeats]) => {
-      song._buffers = {
-        native: { vocal: nativeVocal, beats: nativeBeats },
-        matched: { vocal: matchedVocal, beats: matchedBeats },
-      };
-      song._audioState = "ready";
+    ]).then(([vocal, beats]) => {
+      slot.buffers = { vocal, beats };
+      slot.state = "ready";
     }).catch(err => {
-      song._audioState = "error";
-      song._loadPromise = null; // allow retry
+      slot.state = "error";
+      slot.promise = null; // allow retry
       showJsError("Couldn't load audio for " + song.name + ": " + err.message);
+      throw err;
     });
-    return song._loadPromise;
+    return slot.promise;
   }
 
-  // Plays a slice of a song's native-tempo buffer directly at native pitch —
-  // used only for library previews, so a section sounds like the real song
-  // before it's matched to the project BPM/key.
-  function scheduleNativeSlice(ctx, dest, buffer, sec, at, volume) {
+  // Each section has its own tiny pre-sliced native-tempo preview file (see
+  // public/audio/<song>/sections/) rather than sharing one whole-song
+  // buffer -- a preview always plays a section's exact, never-trimmed
+  // window, so there's nothing to gain from the full file and a lot to
+  // lose in load time. Cached per section+stem once fetched.
+  const sectionPreviewCache = {};
+  function loadSectionPreview(song, sec, stemKey) {
+    const key = sec.id + ":" + stemKey;
+    if (sectionPreviewCache[key]) return sectionPreviewCache[key];
+    const url = audioUrl(`audio/${song.folder}/sections/${sec.id}-${stemKey}.mp3`);
+    const promise = loadAudioBuffer(getCtx(), url).catch(err => {
+      delete sectionPreviewCache[key]; // allow retry
+      throw err;
+    });
+    sectionPreviewCache[key] = promise;
+    return promise;
+  }
+
+  // Plays a section preview buffer straight through -- it's already exactly
+  // that section's audio, start to end, so no offset/duration slicing needed.
+  function schedulePreviewBuffer(ctx, dest, buffer, at, volume) {
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     const gain = ctx.createGain();
     gain.gain.value = volume;
     src.connect(gain).connect(dest);
-    const dur = Math.max(0, Math.min(sec.nativeEnd - sec.nativeStart, buffer.duration - sec.nativeStart));
-    if (dur <= 0) return;
-    src.start(at, sec.nativeStart, dur);
+    src.start(at);
     scheduledNodes.push(src);
   }
 
@@ -1065,34 +1089,45 @@
   function togglePreview(sec, chipEl, mode) {
     const wasThisOne = previewChipEl === chipEl;
     stopPreview();
-    if (wasThisOne) return; // tapping the already-playing chip just stops it
+    if (wasThisOne) return; // tapping the already-playing/loading chip just stops it
 
     unlockAudio();
     const ctx = getCtx();
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    const startAt = ctx.currentTime + 0.05;
-    let durSec;
-    if (sec.songId) {
-      // Real section: play the song's own native-tempo/key buffers so the
-      // preview sounds like the original, before any project matching.
-      const song = SONGS.find(s => s.id === sec.songId);
-      durSec = sec.nativeEnd - sec.nativeStart;
-      if (song && song._buffers) {
-        if (mode !== "beats") scheduleNativeSlice(ctx, ctx.destination, song._buffers.native.vocal, sec, startAt, 0.9);
-        if (mode !== "vocal") scheduleNativeSlice(ctx, ctx.destination, song._buffers.native.beats, sec, startAt, 0.9);
-      }
-    } else {
-      const fakeClip = { root: sec.root || 220, volume: 0.9 };
-      durSec = barsToSeconds(sec.durBars);
-      if (mode !== "beats") scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
-      if (mode !== "vocal") scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
-    }
-
+    previewChipEl = chipEl;
     chipEl.classList.add("playing");
     const icon = chipEl.querySelector(".chip-play-icon");
+
+    if (sec.songId) {
+      // Real section: each section has its own tiny pre-sliced preview file
+      // (native tempo/key, so it sounds like the original before project
+      // matching) -- fetch just that, not anything whole-song. Usually
+      // resolves fast enough that the "playing" state above covers the gap;
+      // the icon only flips to pause once it's actually sounding.
+      const song = SONGS.find(s => s.id === sec.songId);
+      const stems = [];
+      if (mode !== "beats") stems.push("vocal");
+      if (mode !== "vocal") stems.push("beats");
+      Promise.all(stems.map(stemKey => loadSectionPreview(song, sec, stemKey)))
+        .then(buffers => {
+          if (previewChipEl !== chipEl) return; // stopped or replaced before this resolved
+          const startAt = ctx.currentTime + 0.05;
+          buffers.forEach(buf => schedulePreviewBuffer(ctx, ctx.destination, buf, startAt, 0.9));
+          if (icon) icon.textContent = "⏸";
+          const durSec = buffers[0].duration;
+          previewTimeoutId = setTimeout(() => { if (previewChipEl === chipEl) stopPreview(); }, durSec * 1000 + 80);
+        })
+        .catch(() => { if (previewChipEl === chipEl) stopPreview(); });
+      return;
+    }
+
+    const fakeClip = { root: sec.root || 220, volume: 0.9 };
+    const durSec = barsToSeconds(sec.durBars);
+    const startAt = ctx.currentTime + 0.05;
+    if (mode !== "beats") scheduleVocal(ctx, ctx.destination, fakeClip, startAt, durSec);
+    if (mode !== "vocal") scheduleBeats(ctx, ctx.destination, fakeClip, startAt, durSec);
     if (icon) icon.textContent = "⏸";
-    previewChipEl = chipEl;
     previewTimeoutId = setTimeout(() => {
       if (previewChipEl === chipEl) stopPreview();
     }, durSec * 1000 + 80);
