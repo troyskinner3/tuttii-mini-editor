@@ -63,15 +63,32 @@ design spec and decision log.
 
   **Song 3:** not yet sent.
 
-  **Known open item:** the audio files (~390MB total across both songs)
-  are committed straight into `public/audio/` and tracked in git — no
-  external hosting, matching the "smaller stack" Webflow-embed plan.
-  This does make the repo noticeably heavier to clone; worth keeping in
-  mind if a third song of similar size gets added. Also: the Artifact
-  preview link (used for quick visual iteration in chat) serves from a
-  different origin than this repo, so the root-relative `/audio/...`
-  paths won't resolve there — that preview channel needs `npm run dev`
-  / a real deploy to actually hear audio, not the Artifact link.
+  **Stem format: MP3, not WAV.** Originally shipped as WAV specifically to
+  avoid MP3 encoder lead-in silence breaking bar-accurate scheduling.
+  Switched to 192kbps MP3 after empirically verifying (via ffmpeg +
+  Playwright/Chromium `decodeAudioData` on the actual stem files, not
+  just a short test clip) that decoded duration and native/matched
+  ratios match the mathematically-derived scale factor to within
+  0.0002s across full ~3-minute files — no meaningful drift. Cut total
+  stem size from ~390MB to ~34MB (roughly 11x). **Caveat:** only
+  verified in Chromium; Safari has a documented history of MP3 gapless
+  decode quirks, so worth a spot-check on a real iPhone before final
+  launch, though not blocking for internal review. Stem paths live at
+  `public/audio/<song>/*.mp3`, mirrored (same content, git-deduped) at
+  a top-level `audio/` for GitHub Pages' raw-tree serving — see below.
+
+  **Preview deploy:** this branch is directly servable as a static
+  site with no build step — `index.html` and the stem paths in
+  `src/main.js` use plain relative paths (no leading slash), which
+  browsers resolve against the page's own URL, so the exact same
+  source works from the dev server, a normal root deploy, or a GitHub
+  Pages project subpath. GitHub Pages needs either a public repo or a
+  paid plan for a private one — the repo currently holds real licensed
+  stems, so that's a call for Troy, not something to flip on
+  unilaterally. Also: the Artifact preview link (used for quick visual
+  iteration in chat) serves from a different origin than this repo, so
+  it can't reach `/audio/...` at all — that channel is visual-only,
+  not for hearing audio.
 
 - **Pass 3 (optional):** split `src/main.js` into smaller modules.
 

@@ -76,8 +76,8 @@
       isReal: true,
       nativeBpm: 117, nativeKey: "A maj",
       stems: {
-        native: { vocal: audioUrl("audio/be-with-you/native-vocal.wav"), beats: audioUrl("audio/be-with-you/native-instrumental.wav") },
-        matched: { vocal: audioUrl("audio/be-with-you/matched-vocal.wav"), beats: audioUrl("audio/be-with-you/matched-instrumental.wav") },
+        native: { vocal: audioUrl("audio/be-with-you/native-vocal.mp3"), beats: audioUrl("audio/be-with-you/native-instrumental.mp3") },
+        matched: { vocal: audioUrl("audio/be-with-you/matched-vocal.mp3"), beats: audioUrl("audio/be-with-you/matched-instrumental.mp3") },
       },
       sections: [
         { id: "bwy-1",  label: "Intro 1",      nativeStart: 1.026,   nativeEnd: 17.436 },
@@ -102,8 +102,8 @@
       isReal: true,
       nativeBpm: 122, nativeKey: "G# maj",
       stems: {
-        native: { vocal: audioUrl("audio/do-you-remember/native-vocal.wav"), beats: audioUrl("audio/do-you-remember/native-instrumental.wav") },
-        matched: { vocal: audioUrl("audio/do-you-remember/matched-vocal.wav"), beats: audioUrl("audio/do-you-remember/matched-instrumental.wav") },
+        native: { vocal: audioUrl("audio/do-you-remember/native-vocal.mp3"), beats: audioUrl("audio/do-you-remember/native-instrumental.mp3") },
+        matched: { vocal: audioUrl("audio/do-you-remember/matched-vocal.mp3"), beats: audioUrl("audio/do-you-remember/matched-instrumental.mp3") },
       },
       sections: [
         { id: "dyr-1",  label: "Intro 1",      nativeStart: 1.967,   nativeEnd: 5.902 },
