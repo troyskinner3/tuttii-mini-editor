@@ -923,8 +923,23 @@
   // tap on Play would just call pause(), looking unresponsive. Resync to a
   // clean paused state on return instead, so the next tap reliably goes
   // through the normal, already-robust play() path.
+  //
+  // That alone isn't enough, though: iOS can leave a backgrounded context
+  // as a "zombie" -- resume() resolves and .state reads "running", but its
+  // clock/audio graph never actually comes back (currentTime stops
+  // advancing, nothing plays, silently). Trying to resume a context that
+  // might be zombified isn't reliable, so don't try -- close it outright
+  // and let the next getCtx() call build a fresh one from scratch, unlocked
+  // the normal way within that next real gesture.
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && isPlaying) pause();
+    if (document.visibilityState !== "visible") return;
+    if (isPlaying) pause();
+    if (audioCtx) {
+      const stale = audioCtx;
+      audioCtx = null;
+      audioUnlocked = false;
+      stale.close().catch(() => {});
+    }
   });
 
   document.addEventListener("pointerdown", () => { if (!audioUnlocked) unlockAudio(); }, { once: true, passive: true });
