@@ -13,6 +13,12 @@
   const TOTAL_BARS = 32;
   const MIN_DUR_BARS = 1;
 
+  // Resolves a stem path against wherever this build is actually being
+  // served from (Vite's BASE_URL) rather than assuming the site's domain
+  // root -- so the same build works unmodified from the local dev server,
+  // a GitHub Pages project subpath, or a future production root domain.
+  function audioUrl(path) { return import.meta.env.BASE_URL + path; }
+
   function barsToSeconds(b) { return b * BAR_SECONDS; }
   function barsToPx(b) { return b * BAR_PX; }
   function pxToBars(px) { return px / BAR_PX; }
@@ -69,8 +75,8 @@
       isReal: true,
       nativeBpm: 117, nativeKey: "A maj",
       stems: {
-        native: { vocal: "/audio/be-with-you/native-vocal.wav", beats: "/audio/be-with-you/native-instrumental.wav" },
-        matched: { vocal: "/audio/be-with-you/matched-vocal.wav", beats: "/audio/be-with-you/matched-instrumental.wav" },
+        native: { vocal: audioUrl("audio/be-with-you/native-vocal.wav"), beats: audioUrl("audio/be-with-you/native-instrumental.wav") },
+        matched: { vocal: audioUrl("audio/be-with-you/matched-vocal.wav"), beats: audioUrl("audio/be-with-you/matched-instrumental.wav") },
       },
       sections: [
         { id: "bwy-1",  label: "Intro 1",      nativeStart: 1.026,   nativeEnd: 17.436 },
@@ -95,8 +101,8 @@
       isReal: true,
       nativeBpm: 122, nativeKey: "G# maj",
       stems: {
-        native: { vocal: "/audio/do-you-remember/native-vocal.wav", beats: "/audio/do-you-remember/native-instrumental.wav" },
-        matched: { vocal: "/audio/do-you-remember/matched-vocal.wav", beats: "/audio/do-you-remember/matched-instrumental.wav" },
+        native: { vocal: audioUrl("audio/do-you-remember/native-vocal.wav"), beats: audioUrl("audio/do-you-remember/native-instrumental.wav") },
+        matched: { vocal: audioUrl("audio/do-you-remember/matched-vocal.wav"), beats: audioUrl("audio/do-you-remember/matched-instrumental.wav") },
       },
       sections: [
         { id: "dyr-1",  label: "Intro 1",      nativeStart: 1.967,   nativeEnd: 5.902 },
