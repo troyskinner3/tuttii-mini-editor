@@ -896,6 +896,37 @@
     }
   }
 
+  // Every place that's about to schedule audio should call this and await it
+  // first, rather than firing resume() and hoping. iOS in particular can
+  // leave the context "suspended" (or, after certain interruptions, "closed"
+  // outright) even mid-gesture -- scheduling a BufferSourceNode.start() on a
+  // suspended context doesn't error, it just produces no sound, which is
+  // exactly the "UI reacts, nothing audible" failure mode. Also recreates a
+  // fully closed context rather than trying to resume something that can't be.
+  async function ensureAudioReady() {
+    unlockAudio();
+    let ctx = getCtx();
+    if (ctx.state === "closed") {
+      audioCtx = null;
+      ctx = getCtx();
+    }
+    if (ctx.state === "suspended") {
+      try { await ctx.resume(); } catch (err) {}
+    }
+    return ctx;
+  }
+
+  // A backgrounded tab suspends the AudioContext on iOS, and it stays
+  // suspended on return until a fresh user gesture resumes it -- so if
+  // isPlaying was left true from before backgrounding, the internal state
+  // no longer matches reality (nothing is actually playing) and the next
+  // tap on Play would just call pause(), looking unresponsive. Resync to a
+  // clean paused state on return instead, so the next tap reliably goes
+  // through the normal, already-robust play() path.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && isPlaying) pause();
+  });
+
   document.addEventListener("pointerdown", () => { if (!audioUnlocked) unlockAudio(); }, { once: true, passive: true });
 
   let noiseBufferCache = null;
@@ -1086,14 +1117,13 @@
   // mode: "both" (Songs tab -- reconstructs the full mix from both stems),
   // "vocal" (Vocals tab), or "beats" (Inst tab). Drag-and-drop into a lane
   // is unaffected by this -- only what tapping previews.
-  function togglePreview(sec, chipEl, mode) {
+  async function togglePreview(sec, chipEl, mode) {
     const wasThisOne = previewChipEl === chipEl;
     stopPreview();
     if (wasThisOne) return; // tapping the already-playing/loading chip just stops it
 
-    unlockAudio();
-    const ctx = getCtx();
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const ctx = await ensureAudioReady();
+    if (previewChipEl) return; // a different chip was tapped while we were waiting on resume()
 
     previewChipEl = chipEl;
     chipEl.classList.add("playing");
@@ -1118,7 +1148,10 @@
           const durSec = buffers[0].duration;
           previewTimeoutId = setTimeout(() => { if (previewChipEl === chipEl) stopPreview(); }, durSec * 1000 + 80);
         })
-        .catch(() => { if (previewChipEl === chipEl) stopPreview(); });
+        .catch(err => {
+          if (previewChipEl === chipEl) stopPreview();
+          showJsError("Preview failed to load: " + err.message);
+        });
       return;
     }
 
@@ -1151,11 +1184,7 @@
   }
 
   async function play() {
-    if (!audioUnlocked) unlockAudio();
-    const ctx = getCtx();
-    if (ctx.state === "suspended") {
-      try { await ctx.resume(); } catch (err) {}
-    }
+    const ctx = await ensureAudioReady();
     stopAllNodes();
     const end = timelineEndBars();
     if (playheadBar >= end) playheadBar = 0;
