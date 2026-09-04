@@ -1689,6 +1689,19 @@
     new ResizeObserver(reportEmbedHeight).observe(document.documentElement);
     window.addEventListener("load", reportEmbedHeight);
     reportEmbedHeight();
+
+    // A wheel/trackpad scroll over an <iframe> is captured by that
+    // iframe's own browsing context -- it never chain-scrolls the parent
+    // page, even when (as here, in embedded mode) there's nothing left
+    // inside to scroll vertically. Left alone, hovering the embed on a
+    // laptop just does nothing, which reads as a frozen page. Relay
+    // vertical-dominant wheel gestures to the parent instead; horizontal
+    // ones (panning the timeline) are left untouched.
+    document.addEventListener("wheel", function (e) {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      window.parent.postMessage({ type: "tuttii-embed-scroll", deltaY: e.deltaY }, "*");
+    }, { passive: false });
   }
 
 })();
