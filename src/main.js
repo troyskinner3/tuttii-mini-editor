@@ -400,7 +400,7 @@
         <div class="song-sub">Tap to view sections</div>
       </div>
       <div class="song-meta">
-        <div class="meta-line">${PROJECT_BPM} <span class="sep">·</span> ${PROJECT_KEY}</div>
+        <div class="meta-line">${song.nativeBpm} <span class="sep">·</span> ${song.nativeKey}</div>
         <div class="segments">${song.sections.length} segments</div>
       </div>
       <div class="song-check" title="Pre-matched, ready to drag">
