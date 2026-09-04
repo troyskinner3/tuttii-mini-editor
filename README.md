@@ -61,7 +61,22 @@ design spec and decision log.
   11 sections. Audio in `public/audio/do-you-remember/`. Working
   end-to-end — verified with Playwright.
 
-  **Song 3:** not yet sent.
+  **Song 3 — "Smoker Lungs" (Zachary Scott Kline):** BPM 127, Key G major.
+  7 sections. Audio in `public/audio/smoker-lungs/`. Sits between the
+  other two songs in the library (order is just array order in
+  `SONGS`, no separate sort step). Working end-to-end — verified with
+  Playwright. Source files came in as a GitHub release
+  (`audio-smoker-lungs`) rather than a direct upload: a native
+  127bpm/G-major WAV pair plus an already time-stretched-to-project
+  pair (labeled "Freeze" — an Ableton freeze-render, filename tempo/key
+  left unchanged from before the freeze). Identified which was which
+  by decoded duration, not the filename: native measured 168.4s
+  matching the given section timestamps, matched-to-120bpm measured
+  178.2s — matching native × (127/120) to within 0.03%, the same
+  scale-factor check used for songs 1 and 2. Matched pair encoded
+  whole; the 7 section-preview slices were cut from the native pair at
+  the given native timestamps, both at 128kbps MP3 like the existing
+  songs.
 
   **Stem format: MP3, not WAV.** Originally shipped as WAV specifically to
   avoid MP3 encoder lead-in silence breaking bar-accurate scheduling.
@@ -88,7 +103,7 @@ design spec and decision log.
   pair is unchanged — one whole-file pair per song at 128kbps
   (`<song>/matched-{vocal,beats}.mp3`), still lazy-loaded on first drop,
   since trimming can extend a clip into the full matched stem. Total
-  repo audio: ~22MB (down from ~390MB as WAV). All of it is mirrored
+  repo audio: ~33MB (2 songs at ~22MB; +~11MB for Smoker Lungs). All of it is mirrored
   (same content, git-deduped so no extra data) at a top-level `audio/`
   for GitHub Pages' raw-tree serving — see below.
 

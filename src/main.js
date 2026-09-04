@@ -89,6 +89,25 @@
       _matched: { state: "idle", buffers: null, promise: null },
     },
     {
+      id: "sl", name: "Smoker Lungs", artist: "Zachary Scott Kline",
+      thumbColor: "linear-gradient(135deg, #6B7280, #1F2937)", thumbIcon: "🌫️",
+      isReal: true, folder: "smoker-lungs",
+      nativeBpm: 127, nativeKey: "G maj",
+      stems: {
+        matched: { vocal: audioUrl("audio/smoker-lungs/matched-vocal.mp3"), beats: audioUrl("audio/smoker-lungs/matched-instrumental.mp3") },
+      },
+      sections: [
+        { id: "sl-1", label: "Intro 1",        nativeStart: 2.805,   nativeEnd: 17.923 },
+        { id: "sl-2", label: "Verse 1",        nativeStart: 17.923,  nativeEnd: 48.159 },
+        { id: "sl-3", label: "Chorus 1",       nativeStart: 48.159,  nativeEnd: 78.396 },
+        { id: "sl-4", label: "Post-Chorus 1",  nativeStart: 78.396,  nativeEnd: 82.175 },
+        { id: "sl-5", label: "Verse 2",        nativeStart: 82.175,  nativeEnd: 112.411 },
+        { id: "sl-6", label: "Chorus 2",       nativeStart: 112.411, nativeEnd: 150.207 },
+        { id: "sl-7", label: "Outro 1",        nativeStart: 150.207, nativeEnd: 165.325 },
+      ],
+      _matched: { state: "idle", buffers: null, promise: null },
+    },
+    {
       id: "dyr", name: "Do You Remember", artist: "waitwhat",
       thumbColor: "linear-gradient(135deg, #4FD1E8, #E84BC6)", thumbIcon: "🌙",
       isReal: true, folder: "do-you-remember",
