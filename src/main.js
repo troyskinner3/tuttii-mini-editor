@@ -1650,4 +1650,26 @@
   updateHistoryButtons();
   updatePlayheadEl();
 
+  // ---------- Iframe-embed auto-height ----------
+  // .embedded's CSS (style.css) drops the pinned-shell/internal-scroll
+  // layout so this page has one natural height; this reports that height
+  // to the parent window on every layout change so the wrapping <iframe>
+  // (e.g. tuttii.app/try) can resize to match, instead of clipping a long
+  // library short or leaving a dead-space gap under a short one. A
+  // ResizeObserver on the whole document catches song expand/collapse, tab
+  // switches, inspector open/close, future songs added -- anything that
+  // changes layout -- without needing to hook every call site by hand.
+  if (document.documentElement.classList.contains("embedded")) {
+    let lastReportedHeight = 0;
+    function reportEmbedHeight() {
+      const h = document.documentElement.scrollHeight;
+      if (h === lastReportedHeight) return;
+      lastReportedHeight = h;
+      window.parent.postMessage({ type: "tuttii-embed-resize", height: h }, "*");
+    }
+    new ResizeObserver(reportEmbedHeight).observe(document.documentElement);
+    window.addEventListener("load", reportEmbedHeight);
+    reportEmbedHeight();
+  }
+
 })();

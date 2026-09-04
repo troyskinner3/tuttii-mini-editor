@@ -47,6 +47,32 @@
     padding-bottom: 100px;
   }
 
+  /* Embedded (iframe) mode: a bare <iframe> never auto-sizes to its content,
+     so the wrapping page either clips a long library short or leaves a
+     dead-space gap under a short one. Fix lives on both sides: here, drop
+     the pinned-shell/internal-scroll layout so the page has one natural
+     height instead of a fixed one; in main.js, report that height to the
+     parent window on every layout change so the <iframe> can match it. The
+     standalone page (opened directly, not in an iframe) never gets this
+     class, so its pinned-timeline app-shell UX is untouched. */
+  .embedded .app {
+    height: auto;
+    overflow: visible;
+  }
+  .embedded .app-scroll {
+    overflow-y: visible;
+    padding-bottom: 24px;
+  }
+  .embedded .inspector {
+    /* position:fixed is relative to the iframe's own box -- once that box
+       grows to match full-page content, "bottom:12px" could land well
+       below whatever's currently scrolled into view. Flowing it inline
+       right after the timeline (its natural DOM position) keeps it where
+       the user is already looking. */
+    position: static;
+    margin: 0 0 12px;
+  }
+
   /* Header */
   .header {
     display: flex;
