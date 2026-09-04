@@ -1,0 +1,36 @@
+name: Discord Server Audit (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      guild_id:
+        description: "Discord server (guild) ID to audit. Leave blank if the bot is only in one server."
+        required: false
+        default: ""
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r tools/discord-audit/requirements.txt
+
+      - name: Run audit
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GUILD_ID: ${{ inputs.guild_id }}
+        run: python tools/discord-audit/audit.py
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-audit-report
+          path: discord_audit_report.md
