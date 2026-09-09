@@ -224,6 +224,7 @@
   const libraryTabs = document.getElementById("libraryTabs");
   const exportWavBtn = document.getElementById("exportWavBtn");
   const exportMp3Btn = document.getElementById("exportMp3Btn");
+  const titleInput = document.getElementById("titleInput");
   const errBanner = document.getElementById("errBanner");
 
   function showJsError(msg) {
@@ -1554,6 +1555,18 @@
     return offline.startRendering();
   }
 
+  // Filenames can't contain <>:"/\|?* (Windows) or control characters, and
+  // Windows also rejects a trailing space/dot -- strip those out rather than
+  // let a title like "Vocal Chops / Take 2" silently break the download.
+  function exportFilename(ext) {
+    const cleaned = (titleInput.value || "")
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[.\s]+$/, "");
+    return `${cleaned || "tuttii-demo-mashup"}.${ext}`;
+  }
+
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1571,7 +1584,7 @@
     try {
       const rendered = await renderArrangement();
       if (rendered) {
-        downloadBlob(audioBufferToWav(rendered), "tuttii-demo-mashup.wav");
+        downloadBlob(audioBufferToWav(rendered), exportFilename("wav"));
         pushAnalyticsEvent("demo_export_clicked");
       }
     } catch (err) {
@@ -1632,7 +1645,7 @@
       const tail = encoder.flush();
       if (tail.length > 0) chunks.push(tail);
 
-      downloadBlob(new Blob(chunks, { type: "audio/mp3" }), "tuttii-demo-mashup.mp3");
+      downloadBlob(new Blob(chunks, { type: "audio/mp3" }), exportFilename("mp3"));
       pushAnalyticsEvent("demo_export_clicked");
     } catch (err) {
       console.error(err);
