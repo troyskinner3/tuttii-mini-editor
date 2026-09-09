@@ -159,9 +159,11 @@
   // playback going) rather than just landing on /try and reading.
   let interactionStarted = false;
 
+  // GTM only runs in the parent page, not in this iframe, so a local
+  // dataLayer.push() here would land in an isolated, unread dataLayer —
+  // same postMessage bridge already used for tuttii-embed-resize/-scroll.
   function pushAnalyticsEvent(eventName) {
-    window.dataLayer = window.dataLayer || [];
-    window.dataLayer.push({ event: eventName });
+    window.parent.postMessage({ type: "tuttii-embed-analytics", event: eventName }, "*");
   }
 
   function trackFirstInteraction() {
