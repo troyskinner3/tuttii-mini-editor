@@ -153,6 +153,23 @@
   let uidCounter = 1;
   let selectedUid = null;
 
+  // ---------- Analytics ----------
+  // Fires once per page load, the first time the user does something that
+  // signals real engagement (drops a section on the timeline, or gets
+  // playback going) rather than just landing on /try and reading.
+  let interactionStarted = false;
+
+  function pushAnalyticsEvent(eventName) {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: eventName });
+  }
+
+  function trackFirstInteraction() {
+    if (interactionStarted) return;
+    interactionStarted = true;
+    pushAnalyticsEvent("demo_interaction_started");
+  }
+
   // Songs/Vocals/Inst all browse the same song -> section structure; only
   // the active tab changes what tapping a section previews (both stems /
   // vocal only / beats only). Dragging into a lane is unaffected by the
@@ -649,6 +666,7 @@
     arr.splice(insertIdx, 0, clip);
     layout(type);
 
+    trackFirstInteraction();
     renderClips();
     selectClip(clip.uid);
     scrollClipIntoView(clip);
@@ -1436,6 +1454,12 @@
   }
 
   async function play() {
+    const hasClips = clips.vocal.length > 0 || clips.beats.length > 0;
+    if (hasClips) {
+      trackFirstInteraction();
+      pushAnalyticsEvent("demo_play_pressed");
+    }
+
     const ctx = await ensureAudioReady();
 
     // A real clip whose matched audio hasn't finished loading yet would
@@ -1544,7 +1568,10 @@
     exportWavBtn.disabled = true;
     try {
       const rendered = await renderArrangement();
-      if (rendered) downloadBlob(audioBufferToWav(rendered), "tuttii-demo-mashup.wav");
+      if (rendered) {
+        downloadBlob(audioBufferToWav(rendered), "tuttii-demo-mashup.wav");
+        pushAnalyticsEvent("demo_export_clicked");
+      }
     } catch (err) {
       console.error(err);
       alert("Export hit a snag in this browser preview — try again.");
@@ -1604,6 +1631,7 @@
       if (tail.length > 0) chunks.push(tail);
 
       downloadBlob(new Blob(chunks, { type: "audio/mp3" }), "tuttii-demo-mashup.mp3");
+      pushAnalyticsEvent("demo_export_clicked");
     } catch (err) {
       console.error(err);
       showJsError(err.message || "MP3 export failed — try again.");
